@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { Category } from "@/types/shop";
@@ -17,13 +16,9 @@ export default function CategoryList({
   return (
     <section className="w-full" aria-label="دسته‌بندی محصولات">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-bold text-black">
-          دسته‌بندی‌ها
-        </h2>
+        <h2 className="text-lg font-bold text-black">دسته‌بندی‌ها</h2>
 
-        <span className="text-sm text-gray-500">
-          {categories.length} دسته
-        </span>
+        <span className="text-sm text-gray-500">{categories.length} دسته</span>
       </div>
 
       <div className="flex gap-3 overflow-x-auto pb-3">

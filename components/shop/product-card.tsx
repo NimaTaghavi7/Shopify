@@ -1,4 +1,3 @@
-
 import type { Product } from "@/types/shop";
 import { getImageUrl } from "@/lib/api";
 
@@ -16,7 +15,6 @@ export default function ProductCard({ product }: ProductCardProps) {
     <article className="group flex h-full flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white transition duration-200 hover:-translate-y-1 hover:border-gray-400 hover:shadow-lg">
       <div className="relative aspect-square overflow-hidden bg-gray-50">
         {imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={imageUrl}
             alt={product.name}
@@ -39,9 +37,7 @@ export default function ProductCard({ product }: ProductCardProps) {
       </div>
 
       <div className="flex flex-1 flex-col p-4">
-        <p className="mb-2 text-xs text-gray-500">
-          {product.category.name}
-        </p>
+        <p className="mb-2 text-xs text-gray-500">{product.category.name}</p>
 
         <h3 className="line-clamp-2 min-h-12 text-sm font-semibold leading-6 text-gray-900">
           {product.name}
@@ -50,17 +46,13 @@ export default function ProductCard({ product }: ProductCardProps) {
         <div className="mt-auto pt-5">
           {isAvailable ? (
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs text-gray-500">
-                قیمت
-              </span>
+              <span className="text-xs text-gray-500">قیمت</span>
 
               <div className="text-left">
                 <span className="text-base font-bold text-black">
                   {tomanFormatter.format(product.price)}
                 </span>
-                <span className="mr-1 text-xs text-gray-500">
-                  تومان
-                </span>
+                <span className="mr-1 text-xs text-gray-500">تومان</span>
               </div>
             </div>
           ) : (
