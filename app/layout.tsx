@@ -1,9 +1,11 @@
+
+import type { Metadata } from "next";
 import "./globals.css";
 
-
-export const metadata = {
-  title: "Shopify",
-  description: "Shopify",
+export const metadata: Metadata = {
+  title: "Shopify | فروشگاه آنلاین",
+  description:
+    "محصولات را جستجو کنید، دسته‌بندی‌ها را بررسی کنید و محصولات دلخواهتان را پیدا کنید.",
 };
 
 export default function RootLayout({
@@ -12,10 +14,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className="bg-[#0a0a0a]">
-          {children}
-          </body>
+    <html lang="fa" dir="rtl">
+      <body>{children}</body>
     </html>
   );
 }
