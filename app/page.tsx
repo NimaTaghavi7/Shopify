@@ -156,7 +156,7 @@ export default function HomePage() {
             {Array.from({ length: 4 }).map((_, index) => (
               <div
                 key={index}
-                className="h-64 min-w-[220px] flex-1 animate-pulse rounded-2xl bg-gray-100"
+                className="h-64 min-w-55 flex-1 animate-pulse rounded-2xl bg-gray-100"
               />
             ))}
           </div>
@@ -187,7 +187,7 @@ export default function HomePage() {
               <Link
                 key={product.id}
                 href={`/shop/${product.slug}`}
-                className="group w-[220px] shrink-0 snap-start sm:w-[250px]"
+                className="group w-55 shrink-0 snap-start sm:w-62.5"
               >
                 <div className="flex aspect-square items-center justify-center overflow-hidden rounded-2xl border border-gray-100 bg-gray-50 p-5 transition-colors group-hover:border-gray-300">
                   <img
