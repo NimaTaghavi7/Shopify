@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -19,6 +20,7 @@ const initialFilters: ProductFiltersType = {
   minPrice: "",
   maxPrice: "",
   sort: "newest",
+  inStock: false,
 };
 
 const PRODUCTS_PER_PAGE = 8;
@@ -27,12 +29,16 @@ const PRICE_PAGE_SIZE = 100;
 export default function ShopPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [filters, setFilters] = useState<ProductFiltersType>(initialFilters);
+  const [filters, setFilters] =
+    useState<ProductFiltersType>(initialFilters);
+
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalProducts, setTotalProducts] = useState(0);
+
   const [loadingCategories, setLoadingCategories] = useState(true);
   const [loadingProducts, setLoadingProducts] = useState(true);
+
   const [categoryError, setCategoryError] = useState("");
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
@@ -45,6 +51,7 @@ export default function ShopPage() {
 
   const [priceBoundsError, setPriceBoundsError] = useState(false);
 
+  // تأخیر کوتاه برای جستجو
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(filters.search.trim());
@@ -54,6 +61,7 @@ export default function ShopPage() {
     return () => clearTimeout(timer);
   }, [filters.search]);
 
+  // دریافت دسته‌بندی‌ها
   useEffect(() => {
     let cancelled = false;
 
@@ -85,6 +93,7 @@ export default function ShopPage() {
     };
   }, [retry]);
 
+  // محاسبه حداقل و حداکثر قیمت کل محصولات
   useEffect(() => {
     let cancelled = false;
 
@@ -143,6 +152,7 @@ export default function ShopPage() {
     };
   }, [retry]);
 
+  // دریافت محصولات براساس فیلترها
   useEffect(() => {
     let cancelled = false;
 
@@ -156,7 +166,8 @@ export default function ShopPage() {
       if (
         (minPrice !== undefined &&
           (!Number.isFinite(minPrice) || minPrice < 0)) ||
-        (maxPrice !== undefined && (!Number.isFinite(maxPrice) || maxPrice < 0))
+        (maxPrice !== undefined &&
+          (!Number.isFinite(maxPrice) || maxPrice < 0))
       ) {
         setError("لطفاً قیمت معتبر و غیرمنفی وارد کنید.");
         setLoadingProducts(false);
@@ -183,6 +194,7 @@ export default function ShopPage() {
           minPrice,
           maxPrice,
           sort: filters.sort,
+          inStock: filters.inStock ? true : undefined,
           page,
           limit: PRODUCTS_PER_PAGE,
         });
@@ -219,6 +231,7 @@ export default function ShopPage() {
     filters.minPrice,
     filters.maxPrice,
     filters.sort,
+    filters.inStock,
     page,
     retry,
   ]);
@@ -230,14 +243,15 @@ export default function ShopPage() {
       nextFilters.category !== filters.category ||
       nextFilters.minPrice !== filters.minPrice ||
       nextFilters.maxPrice !== filters.maxPrice ||
-      nextFilters.sort !== filters.sort
+      nextFilters.sort !== filters.sort ||
+      nextFilters.inStock !== filters.inStock
     ) {
       setPage(1);
     }
   }
 
   function handleReset() {
-    setFilters(initialFilters);
+    setFilters({ ...initialFilters });
     setDebouncedSearch("");
     setPage(1);
   }
@@ -265,7 +279,7 @@ export default function ShopPage() {
             href="/shop"
             className="text-2xl font-black tracking-tight text-black sm:text-3xl"
           >
-            SHOPIFY<span className="text-gray-400"></span>
+            SHOPIFY
           </a>
 
           <span className="hidden text-sm text-gray-500 sm:inline">
@@ -274,7 +288,7 @@ export default function ShopPage() {
         </div>
 
         <h1 className="text-2xl font-bold text-black sm:text-3xl">
-          همهٔ محصولات
+          همه محصولات
         </h1>
 
         <p className="mt-2 text-sm leading-6 text-gray-500">
@@ -315,8 +329,8 @@ export default function ShopPage() {
           {loadingCategories ? (
             <div className="animate-pulse space-y-3">
               <div className="h-5 w-28 rounded bg-gray-200" />
-              {Array.from({ length: 5 }, (_, i) => (
-                <div key={i} className="h-9 rounded-lg bg-gray-100" />
+              {Array.from({ length: 5 }, (_, index) => (
+                <div key={index} className="h-9 rounded-lg bg-gray-100" />
               ))}
             </div>
           ) : categoryError ? (
@@ -372,6 +386,7 @@ export default function ShopPage() {
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-bold text-black">محصولات</h2>
+
               {!loadingProducts && !error && (
                 <p className="mt-1 text-sm text-gray-600">
                   {totalProducts.toLocaleString("fa-IR")} محصول
