@@ -47,8 +47,13 @@ export function getProducts(params: GetProductsParams = {}): Promise<ProductsRes
   return request<ProductsResponse>(`${API_BASE_URL}/products${query ? `?${query}` : ""}`);
 }
 
+
 export function getImageUrl(image: string): string {
   if (!image) return "";
-  if (/^https?:\/\//i.test(image)) return image;
-  return `${API_BASE_URL}${image.startsWith("/") ? "" : "/"}${image}`;
+
+  if (image.startsWith("http://") || image.startsWith("https://")) {
+    return image;
+  }
+
+  return image.startsWith("/") ? image : `/${image}`;
 }

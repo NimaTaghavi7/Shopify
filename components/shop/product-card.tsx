@@ -12,10 +12,9 @@ export default function ProductCard({ product }: ProductCardProps) {
   const isAvailable = product.inStock && product.stock > 0;
 
   return (
-    <article className="group flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white transition hover:-translate-y-0.5 hover:border-gray-400 hover:shadow-md">
+    <article className="group flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-black bg-white transition hover:-translate-y-0.5 hover:shadow-md">
       <div className="relative aspect-square overflow-hidden bg-gray-50">
         {imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={imageUrl}
             alt={product.name}
@@ -37,7 +36,9 @@ export default function ProductCard({ product }: ProductCardProps) {
       </div>
 
       <div className="flex flex-1 flex-col p-3 sm:p-4">
-        <p className="mb-2 line-clamp-1 text-xs text-gray-500">{product.category.name}</p>
+        <p className="mb-2 line-clamp-1 text-xs text-gray-500">
+          {product.category.name}
+        </p>
         <h3 className="line-clamp-2 min-h-12 text-sm font-medium leading-6 text-gray-900">
           {product.name}
         </h3>
@@ -50,7 +51,9 @@ export default function ProductCard({ product }: ProductCardProps) {
               <span className="text-xs text-gray-500">تومان</span>
             </div>
           ) : (
-            <p className="text-sm font-medium text-gray-500">در حال حاضر موجود نیست</p>
+            <p className="text-sm font-medium text-gray-500">
+              در حال حاضر موجود نیست
+            </p>
           )}
         </div>
       </div>

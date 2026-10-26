@@ -17,7 +17,7 @@ export default function Pagination({ page, totalPages, onPageChange }: Paginatio
         type="button"
         onClick={() => onPageChange(page - 1)}
         disabled={page <= 1}
-        className="rounded-lg border border-gray-200 px-4 py-2.5 text-sm text-gray-700 transition hover:border-black disabled:cursor-not-allowed disabled:opacity-40"
+        className="rounded-lg border border-black px-4 py-2.5 text-sm text-gray-700 transition hover:border-black disabled:cursor-not-allowed disabled:opacity-40"
       >
         قبلی
       </button>
@@ -29,7 +29,7 @@ export default function Pagination({ page, totalPages, onPageChange }: Paginatio
           aria-current={pageNumber === page ? "page" : undefined}
           aria-label={`صفحه ${pageNumber}`}
           className={`min-w-10 rounded-lg border px-3 py-2.5 text-sm transition ${
-            pageNumber === page ? "border-black bg-black font-semibold text-white" : "border-gray-200 text-gray-700 hover:border-black"
+            pageNumber === page ? "border-black bg-black font-semibold text-white" : "border-black text-gray-700 hover:bg-gray-100"
           }`}
         >
           {pageNumber.toLocaleString("fa-IR")}
@@ -39,7 +39,7 @@ export default function Pagination({ page, totalPages, onPageChange }: Paginatio
         type="button"
         onClick={() => onPageChange(page + 1)}
         disabled={page >= totalPages}
-        className="rounded-lg border border-gray-200 px-4 py-2.5 text-sm text-gray-700 transition hover:border-black disabled:cursor-not-allowed disabled:opacity-40"
+        className="rounded-lg border border-black px-4 py-2.5 text-sm text-gray-700 transition hover:border-black disabled:cursor-not-allowed disabled:opacity-40"
       >
         بعدی
       </button>

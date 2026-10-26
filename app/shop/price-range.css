@@ -1,0 +1,30 @@
+/* Styles for the dual-handle price range slider. Imported by app/shop/page.tsx. */
+.price-range-thumb {
+  pointer-events: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.price-range-thumb::-webkit-slider-thumb {
+  pointer-events: auto;
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #000;
+  box-shadow: 0 0 0 1px #000;
+  cursor: grab;
+}
+.price-range-thumb::-moz-range-thumb {
+  pointer-events: auto;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #000;
+  box-shadow: 0 0 0 1px #000;
+  cursor: grab;
+}
+.price-range-upper { z-index: 3; }
+.price-range-thumb:not(.price-range-upper) { z-index: 4; }
