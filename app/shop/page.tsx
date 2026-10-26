@@ -265,7 +265,7 @@ export default function ShopPage() {
             href="/shop"
             className="text-2xl font-black tracking-tight text-black sm:text-3xl"
           >
-            SHOPIFY<span className="text-gray-400">.</span>
+            SHOPIFY<span className="text-gray-400"></span>
           </a>
 
           <span className="hidden text-sm text-gray-500 sm:inline">
