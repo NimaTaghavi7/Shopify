@@ -1,9 +1,11 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { addToCart, getImageUrl, getProduct } from "@/lib/api";
+import { addToCart, getProduct } from "@/lib/api";
 import type { Product } from "@/types/shop";
 
 const priceFormatter = new Intl.NumberFormat("fa-IR");
@@ -18,6 +20,7 @@ export default function ProductDetailsPage() {
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [imageError, setImageError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -31,6 +34,8 @@ export default function ProductDetailsPage() {
 
         if (!cancelled) {
           setProduct(result);
+          setImageError(false);
+          setQuantity(1);
         }
       } catch {
         if (!cancelled) {
@@ -43,7 +48,9 @@ export default function ProductDetailsPage() {
       }
     }
 
-    if (params.id) loadProduct();
+    if (params.id) {
+      void loadProduct();
+    }
 
     return () => {
       cancelled = true;
@@ -53,8 +60,11 @@ export default function ProductDetailsPage() {
   const isAvailable = Boolean(product?.inStock && product.stock > 0);
   const maxQuantity = Math.min(product?.stock ?? 1, 10);
 
+  const imageUrl =
+    product?.image?.startsWith("/") ? product.image : "";
+
   async function handleAddToCart() {
-    if (!product || !isAvailable) return;
+    if (!product || !isAvailable || adding) return;
 
     setAdding(true);
     setError("");
@@ -62,10 +72,19 @@ export default function ProductDetailsPage() {
 
     try {
       await addToCart(product.id, quantity);
+
       window.dispatchEvent(new Event("shop:cart-updated"));
       setSuccess("محصول با موفقیت به سبد خرید اضافه شد.");
     } catch (err) {
-      if (err instanceof Error && err.message === "LOGIN_REQUIRED") {
+      const status =
+        err instanceof Error
+          ? (err as Error & { status?: number }).status
+          : undefined;
+
+      if (
+        err instanceof Error &&
+        (err.message === "LOGIN_REQUIRED" || status === 401)
+      ) {
         router.push("/login");
         return;
       }
@@ -118,10 +137,11 @@ export default function ProductDetailsPage() {
 
   if (!product) return null;
 
-  const imageUrl = getImageUrl(product.image);
-
   return (
-    <main dir="rtl" className="min-h-screen bg-white px-5 py-8 text-black sm:py-12">
+    <main
+      dir="rtl"
+      className="min-h-screen bg-white px-5 py-8 text-black sm:py-12"
+    >
       <div className="mx-auto max-w-6xl">
         <nav className="mb-8 flex flex-wrap items-center gap-2 text-sm text-gray-500">
           <Link href="/" className="transition hover:text-black">
@@ -132,28 +152,32 @@ export default function ProductDetailsPage() {
             فروشگاه
           </Link>
           <span>/</span>
-          <span className="max-w-56 truncate text-black">{product.name}</span>
+          <span className="max-w-56 truncate text-black">
+            {product.name}
+          </span>
         </nav>
 
         <div className="grid items-start gap-8 md:grid-cols-2 md:gap-12">
-          {/* تصویر محصول */}
-          <div className="overflow-hidden rounded-2xl border border-gray-200 bg-gray-50">
-            {imageUrl ? (
-              <img
+          <div className="relative aspect-square overflow-hidden rounded-2xl border border-gray-200 bg-gray-50">
+            {imageUrl && !imageError ? (
+              <Image
                 src={imageUrl}
                 alt={product.name}
-                className={`aspect-square h-full w-full object-contain p-6 sm:p-10 ${
+                fill
+                priority
+                sizes="(max-width: 768px) 100vw, 50vw"
+                onError={() => setImageError(true)}
+                className={`object-contain p-6 sm:p-10 ${
                   isAvailable ? "" : "grayscale opacity-60"
                 }`}
               />
             ) : (
-              <div className="flex aspect-square items-center justify-center text-sm text-gray-400">
+              <div className="flex h-full items-center justify-center text-sm text-gray-400">
                 تصویر محصول موجود نیست
               </div>
             )}
           </div>
 
-          {/* مشخصات و خرید */}
           <section className="flex flex-col">
             <p className="mb-3 text-sm text-gray-500">
               {product.category?.name}
@@ -197,9 +221,12 @@ export default function ProductDetailsPage() {
             </div>
 
             <div className="py-6">
-              <h2 className="mb-3 text-base font-bold">توضیحات محصول</h2>
+              <h2 className="mb-3 text-base font-bold">
+                توضیحات محصول
+              </h2>
               <p className="whitespace-pre-line text-sm leading-8 text-gray-600">
-                {product.description || "توضیحاتی برای این محصول ثبت نشده است."}
+                {product.description ||
+                  "توضیحاتی برای این محصول ثبت نشده است."}
               </p>
             </div>
 
@@ -239,7 +266,10 @@ export default function ProductDetailsPage() {
                       if (!Number.isFinite(value)) return;
 
                       setQuantity(
-                        Math.max(1, Math.min(maxQuantity, Math.floor(value)))
+                        Math.max(
+                          1,
+                          Math.min(maxQuantity, Math.floor(value))
+                        )
                       );
                     }}
                     className="h-11 w-14 border-x border-gray-200 text-center text-sm outline-none"
@@ -250,7 +280,9 @@ export default function ProductDetailsPage() {
                     aria-label="کاهش تعداد"
                     disabled={quantity <= 1}
                     onClick={() =>
-                      setQuantity((current) => Math.max(1, current - 1))
+                      setQuantity((current) =>
+                        Math.max(1, current - 1)
+                      )
                     }
                     className="h-11 w-11 text-lg transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-30"
                   >
@@ -274,7 +306,9 @@ export default function ProductDetailsPage() {
                 role="status"
                 className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-4"
               >
-                <p className="text-sm leading-6 text-black">{success}</p>
+                <p className="text-sm leading-6 text-black">
+                  {success}
+                </p>
                 <Link
                   href="/cart"
                   className="mt-3 inline-block text-sm font-semibold underline underline-offset-4"

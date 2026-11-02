@@ -326,7 +326,6 @@ export async function cancelOrder(
   return getOrder(id);
 }
 
-// Helpers
 
 export function getImageUrl(image: string): string {
   if (!image) return "";
@@ -340,4 +339,65 @@ export function getImageUrl(image: string): string {
 
 export function formatPrice(price: number): string {
   return `${Number(price || 0).toLocaleString("fa-IR")} تومان`;
+}
+// Authentication
+
+export interface AuthUser {
+  id: number;
+  username: string;
+  created_at: string;
+}
+
+export interface AuthResponse {
+  token: string;
+  expires_at: string;
+  user: AuthUser;
+}
+
+export async function loginUser(
+  username: string,
+  password: string,
+): Promise<AuthResponse> {
+  const result = await request<AuthResponse>("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  });
+
+  if (!result.token) {
+    throw createError("توکن ورود از سرور دریافت نشد.");
+  }
+
+  localStorage.setItem("token", result.token);
+
+  return result;
+}
+
+export async function registerUser(
+  username: string,
+  password: string,
+): Promise<AuthResponse> {
+  await request("/auth/register", {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  });
+
+  return loginUser(username, password);
+}
+
+export async function getCurrentUser(): Promise<AuthUser> {
+  return request<AuthUser>("/auth/me", {}, true);
+}
+
+export async function logoutUser(): Promise<void> {
+  try {
+    await request("/auth/logout", {
+      method: "POST",
+    }, true);
+  } finally {
+    localStorage.removeItem("token");
+  }
+}
+
+export function hasToken(): boolean {
+  return Boolean(getToken());
 }

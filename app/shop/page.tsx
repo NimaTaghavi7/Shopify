@@ -6,7 +6,6 @@ import Pagination from "@/components/shop/pagination";
 import ProductCard from "@/components/shop/product-card";
 import ProductFilters from "@/components/shop/product-filters";
 import { getCategories, getProducts } from "@/lib/api";
-import { getImageUrl } from "@/lib/api";
 import "./price-range.css";
 import type {
   Category,
@@ -29,8 +28,7 @@ const PRICE_PAGE_SIZE = 100;
 export default function ShopPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [filters, setFilters] =
-    useState<ProductFiltersType>(initialFilters);
+  const [filters, setFilters] = useState<ProductFiltersType>(initialFilters);
 
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -51,7 +49,6 @@ export default function ShopPage() {
 
   const [priceBoundsError, setPriceBoundsError] = useState(false);
 
-  
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(filters.search.trim());
@@ -150,7 +147,6 @@ export default function ShopPage() {
     };
   }, [retry]);
 
- 
   useEffect(() => {
     let cancelled = false;
 
@@ -164,8 +160,7 @@ export default function ShopPage() {
       if (
         (minPrice !== undefined &&
           (!Number.isFinite(minPrice) || minPrice < 0)) ||
-        (maxPrice !== undefined &&
-          (!Number.isFinite(maxPrice) || maxPrice < 0))
+        (maxPrice !== undefined && (!Number.isFinite(maxPrice) || maxPrice < 0))
       ) {
         setError("لطفاً قیمت معتبر و غیرمنفی وارد کنید.");
         setLoadingProducts(false);

@@ -1,10 +1,11 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { getProducts } from "@/lib/api";
 import type { Product } from "@/types/shop";
-import { getImageUrl } from "@/lib/api";
 
 export default function HomePage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -49,7 +50,7 @@ export default function HomePage() {
       }
     }
 
-    loadProducts();
+    void loadProducts();
 
     return () => {
       cancelled = true;
@@ -80,7 +81,7 @@ export default function HomePage() {
           href="/"
           className="text-5xl font-black tracking-tight sm:text-7xl"
         >
-          SHOPIFY<span className="text-gray-400"></span>
+          SHOPIFY
         </Link>
 
         <h1 className="mt-8 max-w-3xl text-3xl font-extrabold leading-relaxed tracking-tight sm:text-5xl sm:leading-[1.6]">
@@ -124,7 +125,9 @@ export default function HomePage() {
       <section className="mx-auto max-w-7xl px-5 pb-16 sm:px-8">
         <div className="mb-6 flex items-end justify-between gap-4">
           <div>
-            <h2 className="text-xl font-bold sm:text-2xl">محصولات فروشگاه</h2>
+            <h2 className="text-xl font-bold sm:text-2xl">
+              محصولات فروشگاه
+            </h2>
 
             <p className="mt-2 text-sm text-gray-500">
               نگاهی به محصولات موجود در فروشگاه
@@ -190,13 +193,20 @@ export default function HomePage() {
                 href={`/shop/${product.id}`}
                 className="group w-55 shrink-0 snap-start sm:w-62.5"
               >
-                <div className="flex aspect-square items-center justify-center overflow-hidden rounded-2xl border border-gray-100 bg-gray-50 p-5 transition-colors group-hover:border-gray-300">
-                  <img
-                    src={getImageUrl(product.image)}
-                    alt={product.name}
-                    loading="lazy"
-                    className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-105"
-                  />
+                <div className="relative flex aspect-square items-center justify-center overflow-hidden rounded-2xl border border-gray-100 bg-gray-50 p-5 transition-colors group-hover:border-gray-300">
+                  {product.image?.startsWith("/") ? (
+                    <Image
+                      src={product.image}
+                      alt={product.name}
+                      fill
+                      sizes="(max-width: 640px) 220px, 250px"
+                      className="object-contain p-5 transition-transform duration-300 group-hover:scale-105"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-xs text-gray-400">
+                      تصویر موجود نیست
+                    </div>
+                  )}
                 </div>
 
                 <div className="px-1 pt-4">

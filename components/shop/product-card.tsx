@@ -2,10 +2,11 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Product } from "@/types/shop";
-import { addToCart, getImageUrl } from "@/lib/api";
+import { addToCart } from "@/lib/api";
 
 interface ProductCardProps {
   product: Product;
@@ -19,8 +20,12 @@ export default function ProductCard({ product }: ProductCardProps) {
   const [adding, setAdding] = useState(false);
   const [message, setMessage] = useState("");
   const [isError, setIsError] = useState(false);
+  const [imageError, setImageError] = useState(false);
 
-  const imageUrl = getImageUrl(product.image);
+  const imageUrl = product.image?.startsWith("/")
+    ? product.image
+    : "";
+
   const isAvailable = product.inStock && product.stock > 0;
 
   async function handleAddToCart() {
@@ -32,10 +37,15 @@ export default function ProductCard({ product }: ProductCardProps) {
 
     try {
       await addToCart(product.id, 1);
+
       window.dispatchEvent(new Event("shop:cart-updated"));
       setMessage("به سبد اضافه شد.");
     } catch (err) {
-      if (err instanceof Error && err.message === "LOGIN_REQUIRED") {
+      if (
+        err instanceof Error &&
+        (err.message === "LOGIN_REQUIRED" ||
+          (err as Error & { status?: number }).status === 401)
+      ) {
         router.push("/login");
         return;
       }
@@ -58,12 +68,14 @@ export default function ProductCard({ product }: ProductCardProps) {
         aria-label={`مشاهده ${product.name}`}
         className="relative block aspect-square overflow-hidden bg-gray-50"
       >
-        {imageUrl ? (
-          <img
+        {imageUrl && !imageError ? (
+          <Image
             src={imageUrl}
             alt={product.name}
-            loading="lazy"
-            className={`h-full w-full object-contain p-3 transition duration-300 group-hover:scale-105 sm:p-5 ${
+            fill
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+            onError={() => setImageError(true)}
+            className={`object-contain p-3 transition duration-300 group-hover:scale-105 sm:p-5 ${
               isAvailable ? "" : "opacity-50 grayscale"
             }`}
           />
@@ -74,7 +86,7 @@ export default function ProductCard({ product }: ProductCardProps) {
         )}
 
         {!isAvailable && (
-          <span className="absolute right-2 top-2 rounded-md bg-black px-2.5 py-1 text-xs font-medium text-white sm:right-3 sm:top-3">
+          <span className="absolute right-2 top-2 z-10 rounded-md bg-black px-2.5 py-1 text-xs font-medium text-white sm:right-3 sm:top-3">
             ناموجود
           </span>
         )}

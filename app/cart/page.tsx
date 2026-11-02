@@ -1,6 +1,8 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -16,6 +18,7 @@ const money = (value: number) =>
 
 export default function CartPage() {
   const router = useRouter();
+
   const [cart, setCart] = useState<Cart | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -26,6 +29,7 @@ export default function CartPage() {
     try {
       setLoading(true);
       setError("");
+
       const result = await getCart();
       setCart(result);
     } catch (err) {
@@ -33,7 +37,12 @@ export default function CartPage() {
         router.push("/login");
         return;
       }
-      setError(err instanceof Error ? err.message : "دریافت سبد خرید ناموفق بود.");
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "دریافت سبد خرید ناموفق بود."
+      );
     } finally {
       setLoading(false);
     }
@@ -49,11 +58,17 @@ export default function CartPage() {
     try {
       setBusyId(productId);
       setError("");
+
       const result = await updateCartItem(productId, quantity);
       setCart(result as Cart);
+
       window.dispatchEvent(new Event("shop:cart-updated"));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "تغییر تعداد ناموفق بود.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "تغییر تعداد ناموفق بود."
+      );
     } finally {
       setBusyId(null);
     }
@@ -63,12 +78,19 @@ export default function CartPage() {
     try {
       setBusyId(productId);
       setError("");
+
       const result = await removeCartItem(productId);
       setCart(result as Cart);
+
       await loadCart();
+
       window.dispatchEvent(new Event("shop:cart-updated"));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "حذف محصول ناموفق بود.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "حذف محصول ناموفق بود."
+      );
     } finally {
       setBusyId(null);
     }
@@ -80,11 +102,17 @@ export default function CartPage() {
     try {
       setClearing(true);
       setError("");
+
       await clearCart();
       await loadCart();
+
       window.dispatchEvent(new Event("shop:cart-updated"));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "خالی کردن سبد ناموفق بود.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "خالی کردن سبد ناموفق بود."
+      );
     } finally {
       setClearing(false);
     }
@@ -92,7 +120,10 @@ export default function CartPage() {
 
   if (loading) {
     return (
-      <main dir="rtl" className="mx-auto min-h-screen max-w-5xl px-5 py-12">
+      <main
+        dir="rtl"
+        className="mx-auto min-h-screen max-w-5xl px-5 py-12"
+      >
         <div className="animate-pulse space-y-4">
           <div className="h-8 w-40 rounded bg-gray-100" />
           <div className="h-28 rounded-2xl bg-gray-100" />
@@ -105,32 +136,50 @@ export default function CartPage() {
   const items = cart?.items ?? [];
 
   return (
-    <main dir="rtl" className="mx-auto min-h-screen max-w-5xl px-5 py-10 text-black">
+    <main
+      dir="rtl"
+      className="mx-auto min-h-screen max-w-5xl px-5 py-10 text-black"
+    >
       <div className="mb-8 flex flex-wrap items-center justify-between gap-4 border-b border-black pb-5">
         <div>
           <h1 className="text-2xl font-bold">سبد خرید</h1>
+
           <p className="mt-2 text-sm text-gray-500">
             محصولات انتخاب‌شده را بررسی کن.
           </p>
         </div>
-        <Link href="/shop" className="text-sm underline underline-offset-4">
+
+        <Link
+          href="/shop"
+          className="text-sm underline underline-offset-4"
+        >
           ادامه خرید
         </Link>
       </div>
 
       {error && (
-        <p role="alert" className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <p
+          role="alert"
+          className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+        >
           {error}
         </p>
       )}
 
       {items.length === 0 ? (
         <div className="rounded-2xl border border-gray-200 px-5 py-16 text-center">
-          <h2 className="text-lg font-bold">سبد خرید خالی است</h2>
+          <h2 className="text-lg font-bold">
+            سبد خرید خالی است
+          </h2>
+
           <p className="mt-2 text-sm text-gray-500">
             هنوز محصولی به سبد خرید اضافه نکرده‌ای.
           </p>
-          <Link href="/shop" className="mt-6 inline-flex rounded-xl bg-black px-6 py-3 text-sm text-white">
+
+          <Link
+            href="/shop"
+            className="mt-6 inline-flex rounded-xl bg-black px-6 py-3 text-sm text-white"
+          >
             مشاهده محصولات
           </Link>
         </div>
@@ -143,18 +192,28 @@ export default function CartPage() {
                 className="flex flex-col gap-4 rounded-2xl border border-gray-200 p-4 sm:flex-row sm:items-center"
               >
                 <div className="flex min-w-0 flex-1 items-center gap-4">
-                  <img
-                    src={`https://practice.amirm.me/${item.product.image.replace(/^\/+/, "")}`}
-                    alt={item.product.name}
-                    className="h-24 w-24 shrink-0 rounded-xl bg-gray-50 object-contain p-2"
-                  />
+                  <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-gray-50">
+                    <Image
+                      src={item.product.image}
+                      alt={item.product.name}
+                      fill
+                      sizes="96px"
+                      className="object-contain p-2"
+                    />
+                  </div>
+
                   <div className="min-w-0">
-                    <Link href={`/shop/${item.product.id}`} className="line-clamp-2 text-sm font-semibold hover:underline">
+                    <Link
+                      href={`/shop/${item.product.id}`}
+                      className="line-clamp-2 text-sm font-semibold hover:underline"
+                    >
                       {item.product.name}
                     </Link>
+
                     <p className="mt-2 text-sm text-gray-500">
                       {money(item.product.price)}
                     </p>
+
                     <button
                       type="button"
                       onClick={() => deleteItem(item.product.id)}
@@ -170,26 +229,45 @@ export default function CartPage() {
                   <div className="flex items-center overflow-hidden rounded-lg border border-gray-300">
                     <button
                       type="button"
-                      disabled={busyId === item.product.id || item.quantity <= 1}
-                      onClick={() => changeQuantity(item.product.id, item.quantity - 1)}
+                      disabled={
+                        busyId === item.product.id ||
+                        item.quantity <= 1
+                      }
+                      onClick={() =>
+                        changeQuantity(
+                          item.product.id,
+                          item.quantity - 1
+                        )
+                      }
                       className="h-10 w-10 disabled:opacity-30"
                       aria-label="کاهش تعداد"
                     >
                       −
                     </button>
+
                     <span className="min-w-10 text-center text-sm">
                       {item.quantity.toLocaleString("fa-IR")}
                     </span>
+
                     <button
                       type="button"
-                      disabled={busyId === item.product.id || item.quantity >= item.product.stock}
-                      onClick={() => changeQuantity(item.product.id, item.quantity + 1)}
+                      disabled={
+                        busyId === item.product.id ||
+                        item.quantity >= item.product.stock
+                      }
+                      onClick={() =>
+                        changeQuantity(
+                          item.product.id,
+                          item.quantity + 1
+                        )
+                      }
                       className="h-10 w-10 disabled:opacity-30"
                       aria-label="افزایش تعداد"
                     >
                       +
                     </button>
                   </div>
+
                   <strong className="whitespace-nowrap text-sm">
                     {money(item.subtotal)}
                   </strong>
@@ -200,11 +278,15 @@ export default function CartPage() {
 
           <div className="mt-7 flex flex-col gap-5 rounded-2xl border border-black p-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm text-gray-500">مبلغ کل</p>
+              <p className="text-sm text-gray-500">
+                مبلغ کل
+              </p>
+
               <p className="mt-2 text-2xl font-extrabold">
                 {money(cart?.totalPrice ?? 0)}
               </p>
             </div>
+
             <div className="flex flex-wrap gap-3">
               <button
                 type="button"
@@ -214,7 +296,11 @@ export default function CartPage() {
               >
                 {clearing ? "در حال انجام..." : "خالی کردن سبد"}
               </button>
-              <Link href="/checkout" className="rounded-xl bg-black px-6 py-3 text-sm font-semibold text-white">
+
+              <Link
+                href="/checkout"
+                className="rounded-xl bg-black px-6 py-3 text-sm font-semibold text-white"
+              >
                 ادامه و ثبت سفارش
               </Link>
             </div>
