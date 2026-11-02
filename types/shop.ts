@@ -1,4 +1,3 @@
-
 export interface Category {
   id: number;
   slug: string;
@@ -36,6 +35,6 @@ export interface ProductFilters {
   category: string;
   minPrice: string;
   maxPrice: string;
-  sort: "newest" | "price" | "-price";
+  sort: "newest" | "price" | "-price" | "name";
   inStock: boolean;
 }
