@@ -1,15 +1,24 @@
-
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
+import RequireAuth from "@/components/auth/require-auth";
 import {
+  cancelOrder,
+  getErrorMessage,
+  getErrorStatus,
   getOrder,
   payOrder,
-  cancelOrder,
   type Order,
 } from "@/lib/api";
+import {
+  formatDate,
+  formatNumber,
+  formatOrderId,
+  formatToman,
+} from "@/lib/format";
+import { getStatusInfo } from "@/lib/order-status";
 
 type RecordData = Record<string, unknown>;
 
@@ -48,38 +57,12 @@ function getNumber(...values: unknown[]): number | null {
   return null;
 }
 
-const money = (value: number) =>
-  `${new Intl.NumberFormat("fa-IR").format(value)} تومان`;
-
-function statusInfo(status: string) {
-  if (status === "paid") {
-    return {
-      label: "پرداخت شده",
-      className: "bg-green-100 text-green-700",
-    };
-  }
-
-  if (status === "cancelled") {
-    return {
-      label: "لغو شده",
-      className: "bg-red-100 text-red-700",
-    };
-  }
-
-  return {
-    label: "در انتظار پرداخت",
-    className: "bg-yellow-100 text-yellow-800",
-  };
-}
-
+/** ساختار آیتم سفارش بین پاسخ‌های مختلف API ممکن است فرق کند؛ اینجا یکدست می‌شود. */
 function getOrderItem(item: unknown, index: number) {
   const data = toRecord(item);
   const product = toRecord(data.product);
 
-  const productName =
-    typeof data.product === "string"
-      ? data.product
-      : "";
+  const productName = typeof data.product === "string" ? data.product : "";
 
   const name =
     getText(
@@ -91,26 +74,20 @@ function getOrderItem(item: unknown, index: number) {
       productName,
     ) || "محصول سفارش";
 
-  const quantity = Math.max(
-    1,
-    getNumber(data.quantity, data.count) ?? 1,
-  );
+  const quantity = Math.max(1, getNumber(data.quantity, data.count) ?? 1);
 
   const unitPrice =
-    getNumber(
-      data.price,
-      data.unitPrice,
-      data.unit_price,
-      product.price,
-    ) ?? 0;
+    getNumber(data.price, data.unitPrice, data.unit_price, product.price) ?? 0;
 
   const subtotal =
-    getNumber(
-      data.subtotal,
-      data.lineTotal,
-      data.line_total,
-      data.total,
-    ) ?? unitPrice * quantity;
+    getNumber(data.subtotal, data.lineTotal, data.line_total, data.total) ??
+    unitPrice * quantity;
+
+  const productId = getNumber(
+    product.id,
+    data.productId,
+    data.product_id,
+  );
 
   const id =
     getText(
@@ -120,69 +97,77 @@ function getOrderItem(item: unknown, index: number) {
       String(data.product_id ?? ""),
     ) || `${name}-${index}`;
 
-  return {
-    id,
-    name,
-    quantity,
-    subtotal,
-  };
+  return { id, productId, name, quantity, subtotal };
 }
 
-export default function OrderDetailsPage() {
+function OrderDetailsContent() {
   const params = useParams<{ id: string }>();
-  const router = useRouter();
 
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [retry, setRetry] = useState(0);
 
-  async function loadOrder() {
-    try {
+  const orderId = params.id;
+
+  const loadOrder = useCallback(async () => {
+    const result = await getOrder(orderId);
+    setOrder(result);
+  }, [orderId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function initialLoad() {
       setLoading(true);
       setError("");
 
-      const result = await getOrder(params.id);
-      setOrder(result);
-    } catch (err) {
-      const status = (err as { status?: number })?.status;
+      try {
+        const result = await getOrder(orderId);
 
-      if (status === 401) {
-        router.replace("/login");
-        return;
+        if (!cancelled) {
+          setOrder(result);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setOrder(null);
+          setError(
+            getErrorStatus(err) === 404
+              ? "سفارش موردنظر پیدا نشد."
+              : getErrorMessage(err, "دریافت سفارش ناموفق بود."),
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
-
-      setError(
-        err instanceof Error
-          ? err.message
-          : "دریافت سفارش ناموفق بود.",
-      );
-    } finally {
-      setLoading(false);
     }
-  }
 
-  useEffect(() => {
-    if (params.id) {
-      void loadOrder();
+    if (orderId) {
+      void initialLoad();
     }
-  }, [params.id]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [orderId, retry]);
 
   async function handlePay() {
     if (!order || busy || order.status !== "pending") return;
 
-    try {
-      setBusy(true);
-      setError("");
+    setBusy(true);
+    setError("");
+    setNotice("");
 
+    try {
       await payOrder(order.id);
       await loadOrder();
+      setNotice("پرداخت سفارش ثبت شد.");
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "پرداخت سفارش ناموفق بود.",
-      );
+      setError(getErrorMessage(err, "پرداخت سفارش ناموفق بود."));
     } finally {
       setBusy(false);
     }
@@ -193,18 +178,16 @@ export default function OrderDetailsPage() {
 
     if (!window.confirm("از لغو این سفارش مطمئنی؟")) return;
 
-    try {
-      setBusy(true);
-      setError("");
+    setBusy(true);
+    setError("");
+    setNotice("");
 
+    try {
       await cancelOrder(order.id);
       await loadOrder();
+      setNotice("سفارش لغو شد.");
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "لغو سفارش ناموفق بود.",
-      );
+      setError(getErrorMessage(err, "لغو سفارش ناموفق بود."));
     } finally {
       setBusy(false);
     }
@@ -212,68 +195,58 @@ export default function OrderDetailsPage() {
 
   if (loading) {
     return (
-      <main
-        dir="rtl"
-        className="mx-auto min-h-screen max-w-3xl px-5 py-12"
-      >
-        <div className="h-56 animate-pulse rounded-2xl bg-gray-100" />
+      <main dir="rtl" className="page-sm" aria-busy="true">
+        <div className="skeleton h-56" />
       </main>
     );
   }
 
-  if (error && !order) {
+  if (!order) {
     return (
       <main
         dir="rtl"
-        className="mx-auto flex min-h-[60vh] max-w-3xl flex-col items-center justify-center px-5 text-center"
+        className="mx-auto flex min-h-[50vh] max-w-3xl flex-col items-center justify-center px-5 text-center"
       >
-        <p role="alert" className="text-sm text-red-600">
-          {error}
+        <p role="alert" className="text-sm leading-7 text-red-600">
+          {error || "سفارش موردنظر پیدا نشد."}
         </p>
 
-        <Link
-          href="/orders"
-          className="mt-5 rounded-xl bg-black px-6 py-3 text-sm text-white"
-        >
-          بازگشت به سفارش‌ها
-        </Link>
+        <div className="mt-5 flex flex-wrap justify-center gap-3">
+          <button
+            type="button"
+            onClick={() => setRetry((value) => value + 1)}
+            className="btn btn-outline"
+          >
+            تلاش مجدد
+          </button>
+
+          <Link href="/orders" className="btn btn-primary">
+            بازگشت به سفارش‌ها
+          </Link>
+        </div>
       </main>
     );
   }
 
-  if (!order) return null;
+  const status = getStatusInfo(order.status);
+  const date = formatDate(order.created_at ?? order.createdAt);
 
-  const status = statusInfo(order.status);
-
-  const items = Array.isArray(order.items)
-    ? order.items
-    : [];
-
-  const displayItems = items.map((item, index) =>
-    getOrderItem(item, index),
+  const displayItems = (Array.isArray(order.items) ? order.items : []).map(
+    (item, index) => getOrderItem(item, index),
   );
 
-  const itemsTotal = displayItems.reduce(
-    (sum, item) => sum + item.subtotal,
-    0,
-  );
-
-  const total =
-    getNumber(order.totalPrice, order.total) ?? itemsTotal;
+  const itemsTotal = displayItems.reduce((sum, item) => sum + item.subtotal, 0);
+  const total = getNumber(order.totalPrice, order.total) ?? itemsTotal;
 
   return (
-    <main
-      dir="rtl"
-      className="mx-auto min-h-screen max-w-3xl px-5 py-10 text-black"
-    >
-      <div className="mb-8 flex flex-wrap items-center justify-between gap-4 border-b border-black pb-5">
+    <main dir="rtl" className="page-sm text-black">
+      <div className="mb-8 flex flex-wrap items-center justify-between gap-4 border-b border-gray-200 pb-5">
         <div>
-          <h1 className="text-2xl font-bold">
-            جزئیات سفارش
-          </h1>
+          <h1 className="page-title">جزئیات سفارش</h1>
 
           <p className="mt-2 text-sm text-gray-500">
-            شماره سفارش: #{order.id}
+            شماره سفارش: #{formatOrderId(order.id)}
+            {date && <span className="mr-3">تاریخ ثبت: {date}</span>}
           </p>
         </div>
 
@@ -285,56 +258,44 @@ export default function OrderDetailsPage() {
       </div>
 
       {error && (
-        <p
-          role="alert"
-          className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
-        >
+        <p role="alert" className="alert alert-error mb-5">
           {error}
         </p>
       )}
 
-      <section className="space-y-4 rounded-2xl border border-gray-200 p-5">
-        <h2 className="text-base font-bold">
-          اطلاعات گیرنده
-        </h2>
+      {notice && (
+        <p role="status" className="alert alert-success mb-5">
+          {notice}
+        </p>
+      )}
+
+      <section className="card space-y-4 p-5">
+        <h2 className="text-base font-bold">اطلاعات گیرنده</h2>
 
         <div className="grid gap-4 text-sm sm:grid-cols-2">
           <div>
-            <p className="text-xs text-gray-500">
-              نام گیرنده
-            </p>
-
-            <p className="mt-1">
-              {order.fullName || "ثبت نشده"}
-            </p>
+            <p className="text-xs text-gray-500">نام گیرنده</p>
+            <p className="mt-1">{order.fullName || "ثبت نشده"}</p>
           </div>
 
           <div>
-            <p className="text-xs text-gray-500">
-              شماره موبایل
-            </p>
-
+            <p className="text-xs text-gray-500">شماره موبایل</p>
             <p className="mt-1" dir="ltr">
               {order.phone || "ثبت نشده"}
             </p>
           </div>
 
           <div className="sm:col-span-2">
-            <p className="text-xs text-gray-500">
-              آدرس
-            </p>
-
-            <p className="mt-1 leading-7">
+            <p className="text-xs text-gray-500">آدرس</p>
+            <p className="mt-1 whitespace-pre-line leading-7">
               {order.address || "ثبت نشده"}
             </p>
           </div>
         </div>
       </section>
 
-      <section className="mt-5 rounded-2xl border border-gray-200 p-5">
-        <h2 className="mb-4 text-base font-bold">
-          محصولات سفارش
-        </h2>
+      <section className="card mt-5 p-5">
+        <h2 className="mb-4 text-base font-bold">محصولات سفارش</h2>
 
         {displayItems.length > 0 ? (
           <div className="space-y-4">
@@ -344,18 +305,24 @@ export default function OrderDetailsPage() {
                 className="flex items-center justify-between gap-4 border-b border-gray-100 pb-4 last:border-0 last:pb-0"
               >
                 <div className="min-w-0">
-                  <p className="text-sm font-medium">
-                    {item.name}
-                  </p>
+                  {item.productId !== null ? (
+                    <Link
+                      href={`/shop/${item.productId}`}
+                      className="text-sm font-medium hover:underline"
+                    >
+                      {item.name}
+                    </Link>
+                  ) : (
+                    <p className="text-sm font-medium">{item.name}</p>
+                  )}
 
                   <p className="mt-1 text-xs text-gray-500">
-                    تعداد:{" "}
-                    {item.quantity.toLocaleString("fa-IR")}
+                    تعداد: {formatNumber(item.quantity)}
                   </p>
                 </div>
 
                 <strong className="shrink-0 text-sm">
-                  {money(item.subtotal)}
+                  {formatToman(item.subtotal)}
                 </strong>
               </div>
             ))}
@@ -367,13 +334,8 @@ export default function OrderDetailsPage() {
         )}
 
         <div className="mt-5 flex items-center justify-between border-t border-gray-200 pt-4">
-          <span className="text-sm text-gray-500">
-            مبلغ کل
-          </span>
-
-          <strong className="text-lg">
-            {money(total)}
-          </strong>
+          <span className="text-sm text-gray-500">مبلغ کل</span>
+          <strong className="text-lg">{formatToman(total)}</strong>
         </div>
       </section>
 
@@ -383,7 +345,7 @@ export default function OrderDetailsPage() {
             type="button"
             onClick={handlePay}
             disabled={busy}
-            className="rounded-xl bg-black px-5 py-4 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50"
+            className="btn btn-primary py-4"
           >
             {busy ? "در حال انجام..." : "پرداخت آزمایشی"}
           </button>
@@ -392,7 +354,7 @@ export default function OrderDetailsPage() {
             type="button"
             onClick={handleCancel}
             disabled={busy}
-            className="rounded-xl border border-red-300 px-5 py-4 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+            className="btn btn-danger py-4"
           >
             لغو سفارش
           </button>
@@ -406,5 +368,13 @@ export default function OrderDetailsPage() {
         بازگشت به فهرست سفارش‌ها
       </Link>
     </main>
+  );
+}
+
+export default function OrderDetailsPage() {
+  return (
+    <RequireAuth>
+      <OrderDetailsContent />
+    </RequireAuth>
   );
 }

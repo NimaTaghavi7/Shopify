@@ -1,4 +1,3 @@
-
 import type {
   CategoriesResponse,
   ProductsResponse,
@@ -6,6 +5,10 @@ import type {
 } from "@/types/shop";
 
 const API_BASE_URL = "https://practice.amirm.me";
+const TOKEN_KEY = "token";
+
+/** رویدادی که هنگام نامعتبر شدن توکن (۴۰۱ در درخواست احراز‌هویت‌شده) ارسال می‌شود. */
+export const UNAUTHORIZED_EVENT = "shop:unauthorized";
 
 export interface GetProductsParams {
   search?: string;
@@ -53,9 +56,70 @@ export interface ApiError extends Error {
   status?: number;
 }
 
+export interface AuthUser {
+  id: number;
+  username: string;
+  created_at: string;
+}
+
+export interface AuthResponse {
+  token: string;
+  expires_at: string;
+  user: AuthUser;
+}
+
+type StatusMessages = Partial<Record<number, string>>;
+
+interface RequestConfig {
+  /** درخواست باید توکن کاربر را داشته باشد. */
+  authenticated?: boolean;
+  /** پیام فارسی اختصاصی برای کدهای وضعیت همین درخواست. */
+  messages?: StatusMessages;
+}
+
+const DEFAULT_ERROR_MESSAGE = "درخواست ناموفق بود. دوباره تلاش کن.";
+
+const DEFAULT_STATUS_MESSAGES: StatusMessages = {
+  400: "اطلاعات ارسال‌شده معتبر نیست.",
+  401: "نشست کاربری معتبر نیست. دوباره وارد شو.",
+  404: "اطلاعات موردنظر پیدا نشد.",
+  409: "موجودی محصول یا وضعیت سفارش تغییر کرده است.",
+};
+
+// ---------------------------------------------------------------------------
+// توکن و خطا
+// ---------------------------------------------------------------------------
+
 function getToken(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem("token");
+
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function setToken(token: string): void {
+  try {
+    localStorage.setItem(TOKEN_KEY, token);
+  } catch {
+    throw createError(
+      "ذخیره نشست ورود در مرورگر ممکن نیست. حالت خصوصی یا محدودیت‌های مرورگر را بررسی کن.",
+    );
+  }
+}
+
+function clearToken(): void {
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // دسترسی به localStorage ممکن نیست؛ چیزی برای پاک کردن نیست.
+  }
+}
+
+export function hasToken(): boolean {
+  return Boolean(getToken());
 }
 
 function createError(message: string, status?: number): ApiError {
@@ -63,6 +127,23 @@ function createError(message: string, status?: number): ApiError {
   error.status = status;
   return error;
 }
+
+export function getErrorStatus(error: unknown): number | undefined {
+  if (typeof error === "object" && error !== null && "status" in error) {
+    const status = (error as { status?: unknown }).status;
+    return typeof status === "number" ? status : undefined;
+  }
+
+  return undefined;
+}
+
+export function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
+// ---------------------------------------------------------------------------
+// درخواست پایه
+// ---------------------------------------------------------------------------
 
 function buildQuery(params: GetProductsParams): string {
   const searchParams = new URLSearchParams();
@@ -79,7 +160,7 @@ function buildQuery(params: GetProductsParams): string {
 async function request<T>(
   path: string,
   options: RequestInit = {},
-  authenticated = false,
+  config: RequestConfig = {},
 ): Promise<T> {
   const headers = new Headers(options.headers);
 
@@ -87,7 +168,7 @@ async function request<T>(
     headers.set("Content-Type", "application/json");
   }
 
-  if (authenticated) {
+  if (config.authenticated) {
     const token = getToken();
 
     if (!token) {
@@ -112,7 +193,7 @@ async function request<T>(
   }
 
   if (!response.ok) {
-    let message = "درخواست ناموفق بود. دوباره تلاش کن.";
+    let message = DEFAULT_ERROR_MESSAGE;
 
     try {
       const data = await response.json();
@@ -128,16 +209,23 @@ async function request<T>(
       // پاسخ خطا JSON نبود.
     }
 
-    if (response.status === 401) {
-      message = "نشست کاربری معتبر نیست. دوباره وارد شو.";
-    } else if (response.status === 404) {
-      message = "اطلاعات موردنظر پیدا نشد.";
-    } else if (response.status === 409) {
-      message = "موجودی محصول یا وضعیت سفارش تغییر کرده است.";
-    } else if (response.status === 400) {
-      message = "اطلاعات ارسال‌شده معتبر نیست.";
+    const override =
+      config.messages?.[response.status] ??
+      DEFAULT_STATUS_MESSAGES[response.status];
+
+    if (override) {
+      message = override;
     } else if (response.status >= 500) {
       message = "خطایی در سرور رخ داده است.";
+    }
+
+    // توکن منقضی یا نامعتبر: نشست محلی پاک می‌شود و بقیه برنامه خبردار می‌شود.
+    if (response.status === 401 && config.authenticated) {
+      clearToken();
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+      }
     }
 
     throw createError(message, response.status);
@@ -151,36 +239,46 @@ async function request<T>(
 }
 
 function unwrap<T>(result: T | { data: T }): T {
-  if (
-    result !== null &&
-    typeof result === "object" &&
-    "data" in result
-  ) {
+  if (result !== null && typeof result === "object" && "data" in result) {
     return (result as { data: T }).data;
   }
 
   return result as T;
 }
 
-// Categories
+// ---------------------------------------------------------------------------
+// دسته‌بندی‌ها
+// ---------------------------------------------------------------------------
 
 export function getCategories(): Promise<CategoriesResponse> {
   return request<CategoriesResponse>("/categories");
 }
 
-// Products
+let categoriesPromise: Promise<CategoriesResponse> | null = null;
+
+/** دسته‌بندی‌ها را یک‌بار می‌گیرد و بین هدر، فروشگاه و صفحهٔ اصلی به‌اشتراک می‌گذارد. */
+export function getCategoriesCached(): Promise<CategoriesResponse> {
+  if (!categoriesPromise) {
+    categoriesPromise = getCategories().catch((error: unknown) => {
+      categoriesPromise = null;
+      throw error;
+    });
+  }
+
+  return categoriesPromise;
+}
+
+// ---------------------------------------------------------------------------
+// محصولات
+// ---------------------------------------------------------------------------
 
 export function getProducts(
   params: GetProductsParams = {},
 ): Promise<ProductsResponse> {
-  return request<ProductsResponse>(
-    `/products${buildQuery(params)}`,
-  );
+  return request<ProductsResponse>(`/products${buildQuery(params)}`);
 }
 
-export async function getProduct(
-  id: string | number,
-): Promise<Product> {
+export async function getProduct(id: string | number): Promise<Product> {
   const result = await request<Product | { data: Product }>(
     `/products/${encodeURIComponent(String(id))}`,
   );
@@ -188,16 +286,47 @@ export async function getProduct(
   return unwrap(result);
 }
 
-// Cart
+// ---------------------------------------------------------------------------
+// سبد خرید
+// ---------------------------------------------------------------------------
+
+/** پاسخ سبد را ایمن می‌کند: آیتم‌های بدون محصول (مثلاً محصول حذف‌شده) کنار گذاشته می‌شوند. */
+function normalizeCart(raw: unknown): Cart {
+  const source = (raw && typeof raw === "object" ? raw : {}) as Partial<Cart>;
+
+  const items = (Array.isArray(source.items) ? source.items : [])
+    .filter((item): item is CartItem =>
+      Boolean(item && item.product && item.product.id !== undefined),
+    )
+    .map((item) => {
+      const quantity = Number(item.quantity) || 0;
+      const subtotal =
+        Number(item.subtotal) || Number(item.product.price || 0) * quantity;
+
+      return { ...item, quantity, subtotal };
+    });
+
+  const totalItems =
+    Number(source.totalItems) ||
+    items.reduce((sum, item) => sum + item.quantity, 0);
+
+  const totalPrice =
+    Number(source.totalPrice) ||
+    items.reduce((sum, item) => sum + item.subtotal, 0);
+
+  return { items, totalItems, totalPrice };
+}
+
+const STOCK_MESSAGE = "موجودی این محصول برای تعداد درخواستی کافی نیست.";
 
 export async function getCart(): Promise<Cart> {
   const result = await request<Cart | { data: Cart }>(
     "/me/cart",
     {},
-    true,
+    { authenticated: true },
   );
 
-  return unwrap(result);
+  return normalizeCart(unwrap(result));
 }
 
 export async function addToCart(
@@ -212,12 +341,9 @@ export async function addToCart(
     "/me/cart/items",
     {
       method: "POST",
-      body: JSON.stringify({
-        productId: Number(productId),
-        quantity,
-      }),
+      body: JSON.stringify({ productId: Number(productId), quantity }),
     },
-    true,
+    { authenticated: true, messages: { 409: STOCK_MESSAGE } },
   );
 
   return getCart();
@@ -237,7 +363,7 @@ export async function updateCartItem(
       method: "PATCH",
       body: JSON.stringify({ quantity }),
     },
-    true,
+    { authenticated: true, messages: { 409: STOCK_MESSAGE } },
   );
 
   return getCart();
@@ -249,32 +375,34 @@ export async function removeCartItem(
   await request(
     `/me/cart/items/${encodeURIComponent(String(productId))}`,
     { method: "DELETE" },
-    true,
+    { authenticated: true },
   );
 
   return getCart();
 }
 
 export function clearCart(): Promise<void> {
-  return request<void>(
-    "/me/cart",
-    { method: "DELETE" },
-    true,
-  );
+  return request<void>("/me/cart", { method: "DELETE" }, { authenticated: true });
 }
 
-// Orders
+// ---------------------------------------------------------------------------
+// سفارش‌ها
+// ---------------------------------------------------------------------------
 
-export async function createOrder(
-  data: CreateOrderData,
-): Promise<Order> {
+export async function createOrder(data: CreateOrderData): Promise<Order> {
   const result = await request<Order | { data: Order }>(
     "/me/orders",
     {
       method: "POST",
       body: JSON.stringify(data),
     },
-    true,
+    {
+      authenticated: true,
+      messages: {
+        400: "اطلاعات سفارش یا سبد خرید معتبر نیست. فیلدها و سبد خرید را بررسی کن.",
+        409: "موجودی بعضی محصولات تغییر کرده است. سبد خرید را بررسی کن و دوباره تلاش کن.",
+      },
+    },
   );
 
   return unwrap(result);
@@ -284,90 +412,76 @@ export async function getOrders(): Promise<Order[]> {
   const result = await request<Order[] | { data: Order[] }>(
     "/me/orders",
     {},
-    true,
+    { authenticated: true },
   );
 
-  return unwrap(result);
+  const orders = unwrap(result);
+  return Array.isArray(orders) ? orders : [];
 }
 
-export async function getOrder(
-  id: string | number,
-): Promise<Order> {
+export async function getOrder(id: string | number): Promise<Order> {
   const result = await request<Order | { data: Order }>(
     `/me/orders/${encodeURIComponent(String(id))}`,
     {},
-    true,
+    { authenticated: true, messages: { 404: "سفارش موردنظر پیدا نشد." } },
   );
 
   return unwrap(result);
 }
 
-export async function payOrder(
-  id: string | number,
-): Promise<Order> {
+export async function payOrder(id: string | number): Promise<Order> {
   await request(
     `/me/orders/${encodeURIComponent(String(id))}/pay`,
     { method: "POST" },
-    true,
+    {
+      authenticated: true,
+      messages: { 409: "وضعیت این سفارش تغییر کرده و پرداخت آن ممکن نیست." },
+    },
   );
 
   return getOrder(id);
 }
 
-export async function cancelOrder(
-  id: string | number,
-): Promise<Order> {
+export async function cancelOrder(id: string | number): Promise<Order> {
   await request(
     `/me/orders/${encodeURIComponent(String(id))}/cancel`,
     { method: "POST" },
-    true,
+    {
+      authenticated: true,
+      messages: { 409: "وضعیت این سفارش تغییر کرده و لغو آن ممکن نیست." },
+    },
   );
 
   return getOrder(id);
 }
 
-
-export function getImageUrl(image: string): string {
-  if (!image) return "";
-
-  if (/^https?:\/\//i.test(image)) {
-    return image;
-  }
-
-  return `${API_BASE_URL}/${image.replace(/^\/+/, "")}`;
-}
-
-export function formatPrice(price: number): string {
-  return `${Number(price || 0).toLocaleString("fa-IR")} تومان`;
-}
-// Authentication
-
-export interface AuthUser {
-  id: number;
-  username: string;
-  created_at: string;
-}
-
-export interface AuthResponse {
-  token: string;
-  expires_at: string;
-  user: AuthUser;
-}
+// ---------------------------------------------------------------------------
+// احراز هویت
+// ---------------------------------------------------------------------------
 
 export async function loginUser(
   username: string,
   password: string,
 ): Promise<AuthResponse> {
-  const result = await request<AuthResponse>("/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ username, password }),
-  });
+  const result = await request<AuthResponse>(
+    "/auth/login",
+    {
+      method: "POST",
+      body: JSON.stringify({ username, password }),
+    },
+    {
+      messages: {
+        400: "نام کاربری و رمز عبور را بررسی کن.",
+        401: "نام کاربری یا رمز عبور اشتباه است.",
+      },
+    },
+  );
 
   if (!result.token) {
     throw createError("توکن ورود از سرور دریافت نشد.");
   }
 
-  localStorage.setItem("token", result.token);
+  setToken(result.token);
 
   return result;
 }
@@ -376,28 +490,41 @@ export async function registerUser(
   username: string,
   password: string,
 ): Promise<AuthResponse> {
-  await request("/auth/register", {
-    method: "POST",
-    body: JSON.stringify({ username, password }),
-  });
-
-  return loginUser(username, password);
-}
-
-export async function getCurrentUser(): Promise<AuthUser> {
-  return request<AuthUser>("/auth/me", {}, true);
-}
-
-export async function logoutUser(): Promise<void> {
-  try {
-    await request("/auth/logout", {
+  await request(
+    "/auth/register",
+    {
       method: "POST",
-    }, true);
-  } finally {
-    localStorage.removeItem("token");
+      body: JSON.stringify({ username, password }),
+    },
+    {
+      messages: {
+        400: "نام کاربری یا رمز عبور معتبر نیست. نام کاربری را کمی تغییر بده یا رمز طولانی‌تری انتخاب کن.",
+        409: "این نام کاربری قبلاً ثبت شده است. نام دیگری انتخاب کن.",
+      },
+    },
+  );
+
+  try {
+    return await loginUser(username, password);
+  } catch (error) {
+    throw createError(
+      `حساب ساخته شد، اما ورود خودکار انجام نشد: ${getErrorMessage(error, "دوباره وارد شو.")}`,
+      getErrorStatus(error),
+    );
   }
 }
 
-export function hasToken(): boolean {
-  return Boolean(getToken());
+export function getCurrentUser(): Promise<AuthUser> {
+  return request<AuthUser>("/auth/me", {}, { authenticated: true });
+}
+
+/** خروج همیشه نشست محلی را پاک می‌کند، حتی اگر درخواست خروج به سرور نرسد. */
+export async function logoutUser(): Promise<void> {
+  try {
+    await request("/auth/logout", { method: "POST" }, { authenticated: true });
+  } catch {
+    // خطای شبکه یا توکن منقضی مانع خروج کاربر نمی‌شود.
+  } finally {
+    clearToken();
+  }
 }

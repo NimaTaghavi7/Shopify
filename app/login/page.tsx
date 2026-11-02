@@ -1,14 +1,20 @@
-
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { Suspense, useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import AuthLayout from "@/components/auth/auth-layout";
-import { loginUser } from "@/lib/api";
+import { useAuth } from "@/components/providers/auth-provider";
+import { getErrorMessage } from "@/lib/api";
+import { registerHref, safeNextPath } from "@/lib/auth-redirect";
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const { status, login } = useAuth();
+
+  const rawNext = searchParams.get("next");
+  const next = safeNextPath(rawNext);
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -16,8 +22,18 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // کاربر واردشده (یا تازه واردشده) نباید صفحهٔ ورود را ببیند.
+  useEffect(() => {
+    if (status === "authenticated") {
+      router.replace(next);
+    }
+  }, [status, next, router]);
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (loading) return;
+
     setError("");
 
     if (!username.trim() || !password) {
@@ -25,34 +41,31 @@ export default function LoginPage() {
       return;
     }
 
+    setLoading(true);
+
     try {
-      setLoading(true);
-
-      await loginUser(username.trim(), password);
-
-      router.replace("/shop");
+      await login(username.trim(), password);
+      // هدایت را effect بالا پس از تغییر وضعیت انجام می‌دهد.
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "ورود ناموفق بود. دوباره تلاش کن.",
-      );
-    } finally {
+      setError(getErrorMessage(err, "ورود ناموفق بود. دوباره تلاش کن."));
       setLoading(false);
     }
   }
 
+  const busy = loading || status === "authenticated";
+
   return (
     <AuthLayout
       title="خوش برگشتی!"
-      description="برای ورود به حساب کاربری، اطلاعاتت را وارد کن."
+      description={
+        rawNext
+          ? "برای ادامه، وارد حساب کاربری‌ات شو."
+          : "برای ورود به حساب کاربری، اطلاعاتت را وارد کن."
+      }
     >
-      <form onSubmit={handleSubmit} className="space-y-5">
+      <form onSubmit={handleSubmit} noValidate className="space-y-5">
         <div>
-          <label
-            htmlFor="username"
-            className="mb-2 block text-sm font-semibold"
-          >
+          <label htmlFor="username" className="field-label">
             نام کاربری
           </label>
 
@@ -63,17 +76,13 @@ export default function LoginPage() {
             onChange={(event) => setUsername(event.target.value)}
             placeholder="نام کاربری خود را وارد کن"
             autoComplete="username"
-            required
-            disabled={loading}
-            className="h-12 w-full rounded-xl border border-gray-200 bg-gray-50 px-4 text-sm outline-none transition placeholder:text-gray-400 focus:border-black focus:bg-white disabled:opacity-60"
+            disabled={busy}
+            className="input"
           />
         </div>
 
         <div>
-          <label
-            htmlFor="password"
-            className="mb-2 block text-sm font-semibold"
-          >
+          <label htmlFor="password" className="field-label">
             رمز عبور
           </label>
 
@@ -85,15 +94,15 @@ export default function LoginPage() {
               onChange={(event) => setPassword(event.target.value)}
               placeholder="رمز عبور خود را وارد کن"
               autoComplete="current-password"
-              required
-              disabled={loading}
-              className="h-12 w-full rounded-xl border border-gray-200 bg-gray-50 px-4 pl-20 text-sm outline-none transition placeholder:text-gray-400 focus:border-black focus:bg-white disabled:opacity-60"
+              disabled={busy}
+              className="input pl-20"
             />
 
             <button
               type="button"
               onClick={() => setShowPassword((value) => !value)}
-              disabled={loading}
+              disabled={busy}
+              aria-pressed={showPassword}
               className="absolute left-4 top-1/2 -translate-y-1/2 text-xs text-gray-500 transition hover:text-black"
             >
               {showPassword ? "پنهان کردن" : "نمایش"}
@@ -102,20 +111,17 @@ export default function LoginPage() {
         </div>
 
         {error && (
-          <div
-            role="alert"
-            className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm leading-6 text-red-600"
-          >
+          <div role="alert" className="alert alert-error">
             {error}
           </div>
         )}
 
         <button
           type="submit"
-          disabled={loading}
-          className="flex h-12 w-full items-center justify-center rounded-xl bg-black text-sm font-bold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={busy}
+          className="btn btn-primary h-12 w-full py-0"
         >
-          {loading ? "در حال ورود..." : "ورود به حساب"}
+          {busy ? "در حال ورود..." : "ورود به حساب"}
         </button>
       </form>
 
@@ -124,12 +130,20 @@ export default function LoginPage() {
       <p className="text-center text-sm text-gray-500">
         هنوز حساب کاربری نداری؟{" "}
         <Link
-          href="/register"
+          href={registerHref(rawNext ?? undefined)}
           className="font-bold text-black underline underline-offset-4 hover:text-gray-600"
         >
           ثبت‌نام کن
         </Link>
       </p>
     </AuthLayout>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
   );
 }

@@ -27,11 +27,13 @@ body {
   color: var(--foreground);
   font-family: "Vazirmatn", sans-serif;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -51,4 +53,78 @@ button:disabled {
 :focus-visible {
   outline: 2px solid #171717;
   outline-offset: 3px;
+}
+
+/*
+ * Design System مشترک
+ * همهٔ صفحات از همین کلاس‌ها استفاده می‌کنند تا دکمه‌ها، فرم‌ها و کارت‌ها یکدست بمانند.
+ */
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold transition duration-200 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100;
+  }
+
+  .btn-primary {
+    @apply bg-black text-white hover:bg-gray-800;
+  }
+
+  .btn-outline {
+    @apply border border-gray-300 bg-white text-black hover:border-black;
+  }
+
+  .btn-danger {
+    @apply border border-red-300 bg-white text-red-600 hover:bg-red-50;
+  }
+
+  .input {
+    @apply h-12 w-full rounded-xl border border-gray-200 bg-gray-50 px-4 text-sm outline-none transition placeholder:text-gray-400 focus:border-black focus:bg-white disabled:opacity-60;
+  }
+
+  .input-error {
+    @apply border-red-300 bg-red-50/40;
+  }
+
+  .card {
+    @apply rounded-2xl border border-gray-200 bg-white;
+  }
+
+  .alert {
+    @apply rounded-xl border px-4 py-3 text-sm leading-7;
+  }
+
+  .alert-error {
+    @apply border-red-200 bg-red-50 text-red-700;
+  }
+
+  .alert-success {
+    @apply border-green-200 bg-green-50 text-green-800;
+  }
+
+  .skeleton {
+    @apply animate-pulse rounded-xl bg-gray-100;
+  }
+
+  .page {
+    @apply mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8;
+  }
+
+  .page-md {
+    @apply mx-auto w-full max-w-5xl px-4 py-8 sm:px-6;
+  }
+
+  .page-sm {
+    @apply mx-auto w-full max-w-3xl px-4 py-8 sm:px-6;
+  }
+
+  .page-title {
+    @apply text-2xl font-bold sm:text-3xl;
+  }
+
+  .field-label {
+    @apply mb-2 block text-sm font-semibold;
+  }
+
+  .field-error {
+    @apply mt-2 text-xs leading-5 text-red-600;
+  }
 }

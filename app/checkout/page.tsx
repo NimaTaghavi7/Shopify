@@ -1,92 +1,132 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createOrder, getCart, type Cart } from "@/lib/api";
+import RequireAuth from "@/components/auth/require-auth";
+import { useCart } from "@/components/providers/cart-provider";
+import ProductImage from "@/components/shop/product-image";
+import { createOrder, getErrorMessage } from "@/lib/api";
+import { formatNumber, formatToman, normalizeDigits } from "@/lib/format";
 
-export default function CheckoutPage() {
+interface FieldErrors {
+  fullName?: string;
+  phone?: string;
+  address?: string;
+}
+
+function validate(fullName: string, phone: string, address: string) {
+  const errors: FieldErrors = {};
+
+  if (fullName.trim().length < 3) {
+    errors.fullName = "نام و نام خانوادگی را کامل وارد کن (حداقل ۳ حرف).";
+  }
+
+  if (!/^09\d{9}$/.test(phone)) {
+    errors.phone = "شماره موبایل باید با ۰۹ شروع شود و ۱۱ رقم داشته باشد.";
+  }
+
+  if (address.trim().length < 10) {
+    errors.address = "آدرس را کامل‌تر وارد کن (استان، شهر، خیابان و پلاک).";
+  }
+
+  return errors;
+}
+
+function CheckoutContent() {
   const router = useRouter();
-  const [cart, setCart] = useState<Cart | null>(null);
+  const { cart, status, error: loadError, refresh } = useCart();
+
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    let active = true;
-
-    getCart()
-      .then((result) => {
-        if (active) setCart(result);
-      })
-      .catch((err) => {
-        if (active) {
-          if (err instanceof Error && err.message === "LOGIN_REQUIRED") {
-            router.push("/login");
-          } else {
-            setError(err instanceof Error ? err.message : "دریافت سبد خرید ناموفق بود.");
-          }
-        }
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [router]);
+  // قفل هم‌زمان: دو کلیک پشت‌سرهم قبل از اعمال state نباید دو سفارش ثبت کند.
+  const submitLock = useRef(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (submitLock.current) return;
+
     setError("");
 
-    const normalizedPhone = phone.replace(/\s/g, "");
+    const normalizedPhone = normalizeDigits(phone).replace(/[\s-]/g, "");
+    const errors = validate(fullName, normalizedPhone, address);
 
-    if (!/^09\d{9}$/.test(normalizedPhone)) {
-      setError("شماره موبایل باید با 09 شروع شود و ۱۱ رقم داشته باشد.");
-      return;
-    }
+    setFieldErrors(errors);
 
-    if (!fullName.trim() || !address.trim()) {
-      setError("لطفاً تمام فیلدها را تکمیل کن.");
-      return;
-    }
+    if (Object.keys(errors).length > 0) return;
+
+    submitLock.current = true;
+    setSubmitting(true);
 
     try {
-      setSubmitting(true);
       const order = await createOrder({
         fullName: fullName.trim(),
         phone: normalizedPhone,
         address: address.trim(),
       });
 
-      window.dispatchEvent(new Event("shop:cart-updated"));
-      router.push(`/orders/${order.id}`);
+      // سبد سمت سرور خالی شده؛ شمارندهٔ هدر هم بدون انتظار به‌روز می‌شود.
+      void refresh();
+      router.replace(
+        order?.id !== undefined && order?.id !== null
+          ? `/orders/${order.id}`
+          : "/orders",
+      );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "ثبت سفارش ناموفق بود.");
-    } finally {
+      setError(getErrorMessage(err, "ثبت سفارش ناموفق بود."));
+      submitLock.current = false;
       setSubmitting(false);
     }
   }
 
-  if (loading) {
+  if (status === "idle" || status === "loading") {
     return (
-      <main dir="rtl" className="mx-auto min-h-screen max-w-3xl px-5 py-12">
-        <div className="h-40 animate-pulse rounded-2xl bg-gray-100" />
+      <main dir="rtl" className="page-sm" aria-busy="true">
+        <div className="skeleton h-8 w-40" />
+        <div className="skeleton mt-6 h-64" />
       </main>
     );
   }
 
-  if (!cart?.items?.length) {
+  if (status === "error" && !cart) {
     return (
-      <main dir="rtl" className="mx-auto min-h-[70vh] max-w-3xl px-5 py-16 text-center">
+      <main dir="rtl" className="page-sm">
+        <div role="alert" className="card px-5 py-14 text-center">
+          <p className="text-sm leading-7 text-gray-700">{loadError}</p>
+
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            className="btn btn-primary mt-5"
+          >
+            تلاش مجدد
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  const items = cart?.items ?? [];
+
+  if (items.length === 0) {
+    return (
+      <main
+        dir="rtl"
+        className="mx-auto min-h-[50vh] max-w-3xl px-5 py-16 text-center"
+      >
         <h1 className="text-2xl font-bold">سبد خرید خالی است</h1>
-        <p className="mt-3 text-sm text-gray-500">برای ثبت سفارش ابتدا محصولی انتخاب کن.</p>
-        <Link href="/shop" className="mt-6 inline-flex rounded-xl bg-black px-6 py-3 text-sm text-white">
+
+        <p className="mt-3 text-sm text-gray-500">
+          برای ثبت سفارش ابتدا محصولی انتخاب کن.
+        </p>
+
+        <Link href="/shop" className="btn btn-primary mt-6">
           بازگشت به فروشگاه
         </Link>
       </main>
@@ -94,86 +134,173 @@ export default function CheckoutPage() {
   }
 
   return (
-    <main dir="rtl" className="mx-auto min-h-screen max-w-3xl px-5 py-10 text-black">
-      <div className="mb-8 border-b border-black pb-5">
-        <h1 className="text-2xl font-bold">تکمیل سفارش</h1>
-        <p className="mt-2 text-sm text-gray-500">اطلاعات تحویل سفارش را وارد کن.</p>
+    <main dir="rtl" className="page-md text-black">
+      <div className="mb-8 border-b border-gray-200 pb-5">
+        <h1 className="page-title">تکمیل سفارش</h1>
+        <p className="mt-2 text-sm text-gray-500">
+          اطلاعات تحویل سفارش را وارد کن.
+        </p>
       </div>
 
-      {error && (
-        <p role="alert" className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          {error}
-        </p>
-      )}
-
-      <form onSubmit={handleSubmit} className="space-y-5 rounded-2xl border border-gray-200 p-5 sm:p-7">
-        <div>
-          <label htmlFor="fullName" className="mb-2 block text-sm font-semibold">نام و نام خانوادگی</label>
-          <input
-            id="fullName"
-            value={fullName}
-            onChange={(event) => setFullName(event.target.value)}
-            required
-            autoComplete="name"
-            className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm outline-none focus:border-black"
-            placeholder="نام کامل"
-          />
-        </div>
-
-        <div>
-          <label htmlFor="phone" className="mb-2 block text-sm font-semibold">شماره موبایل</label>
-          <input
-            id="phone"
-            type="tel"
-            inputMode="numeric"
-            value={phone}
-            onChange={(event) => setPhone(event.target.value)}
-            required
-            autoComplete="tel"
-            maxLength={11}
-            className="w-full rounded-xl border border-gray-300 px-4 py-3 text-left text-sm outline-none focus:border-black"
-            placeholder="09123456789"
-            dir="ltr"
-          />
-        </div>
-
-        <div>
-          <label htmlFor="address" className="mb-2 block text-sm font-semibold">آدرس کامل</label>
-          <textarea
-            id="address"
-            value={address}
-            onChange={(event) => setAddress(event.target.value)}
-            required
-            rows={4}
-            autoComplete="street-address"
-            className="w-full resize-y rounded-xl border border-gray-300 px-4 py-3 text-sm leading-7 outline-none focus:border-black"
-            placeholder="استان، شهر، خیابان، کوچه و پلاک"
-          />
-        </div>
-
-        <div className="rounded-xl bg-gray-50 p-4">
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-500">تعداد محصولات</span>
-            <strong>{cart.totalItems.toLocaleString("fa-IR")}</strong>
-          </div>
-          <div className="mt-3 flex justify-between text-sm">
-            <span className="text-gray-500">مبلغ قابل پرداخت</span>
-            <strong>{new Intl.NumberFormat("fa-IR").format(cart.totalPrice)} تومان</strong>
-          </div>
-        </div>
-
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-full rounded-xl bg-black px-6 py-4 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:cursor-wait disabled:opacity-50"
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <form
+          onSubmit={handleSubmit}
+          noValidate
+          className="card order-2 space-y-5 p-5 sm:p-7 lg:order-1"
         >
-          {submitting ? "در حال ثبت سفارش..." : "ثبت نهایی سفارش"}
-        </button>
-      </form>
+          {error && (
+            <p role="alert" className="alert alert-error">
+              {error}
+            </p>
+          )}
 
-      <Link href="/cart" className="mt-5 inline-block text-sm text-gray-500 underline underline-offset-4">
-        بازگشت به سبد خرید
-      </Link>
+          <div>
+            <label htmlFor="fullName" className="field-label">
+              نام و نام خانوادگی
+            </label>
+
+            <input
+              id="fullName"
+              value={fullName}
+              onChange={(event) => setFullName(event.target.value)}
+              autoComplete="name"
+              disabled={submitting}
+              aria-invalid={Boolean(fieldErrors.fullName)}
+              aria-describedby={fieldErrors.fullName ? "fullName-error" : undefined}
+              className={`input ${fieldErrors.fullName ? "input-error" : ""}`}
+              placeholder="نام کامل"
+            />
+
+            {fieldErrors.fullName && (
+              <p id="fullName-error" role="alert" className="field-error">
+                {fieldErrors.fullName}
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label htmlFor="phone" className="field-label">
+              شماره موبایل
+            </label>
+
+            <input
+              id="phone"
+              type="tel"
+              inputMode="numeric"
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
+              autoComplete="tel"
+              maxLength={14}
+              disabled={submitting}
+              aria-invalid={Boolean(fieldErrors.phone)}
+              aria-describedby={fieldErrors.phone ? "phone-error" : undefined}
+              className={`input text-left ${fieldErrors.phone ? "input-error" : ""}`}
+              placeholder="09123456789"
+              dir="ltr"
+            />
+
+            {fieldErrors.phone && (
+              <p id="phone-error" role="alert" className="field-error">
+                {fieldErrors.phone}
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label htmlFor="address" className="field-label">
+              آدرس کامل
+            </label>
+
+            <textarea
+              id="address"
+              value={address}
+              onChange={(event) => setAddress(event.target.value)}
+              rows={4}
+              autoComplete="street-address"
+              disabled={submitting}
+              aria-invalid={Boolean(fieldErrors.address)}
+              aria-describedby={fieldErrors.address ? "address-error" : undefined}
+              className={`input h-auto resize-y py-3 leading-7 ${
+                fieldErrors.address ? "input-error" : ""
+              }`}
+              placeholder="استان، شهر، خیابان، کوچه و پلاک"
+            />
+
+            {fieldErrors.address && (
+              <p id="address-error" role="alert" className="field-error">
+                {fieldErrors.address}
+              </p>
+            )}
+          </div>
+
+          <button
+            type="submit"
+            disabled={submitting}
+            className="btn btn-primary w-full py-4"
+          >
+            {submitting ? "در حال ثبت سفارش..." : "ثبت نهایی سفارش"}
+          </button>
+
+          <Link
+            href="/cart"
+            className="inline-block text-sm text-gray-500 underline underline-offset-4"
+          >
+            بازگشت به سبد خرید
+          </Link>
+        </form>
+
+        <aside className="card order-1 space-y-4 border-black p-5 lg:sticky lg:top-24 lg:order-2">
+          <h2 className="text-base font-bold">خلاصه سفارش</h2>
+
+          <ul className="space-y-3">
+            {items.map((item) => (
+              <li key={item.product.id} className="flex items-center gap-3">
+                <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-gray-50">
+                  <ProductImage
+                    src={item.product.image}
+                    alt={item.product.name}
+                    sizes="56px"
+                    className="object-contain p-1"
+                  />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <p className="line-clamp-1 text-sm font-medium">
+                    {item.product.name}
+                  </p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    {formatNumber(item.quantity)} × {formatToman(item.product.price)}
+                  </p>
+                </div>
+
+                <strong className="shrink-0 text-xs">
+                  {formatToman(item.subtotal)}
+                </strong>
+              </li>
+            ))}
+          </ul>
+
+          <div className="space-y-3 border-t border-gray-100 pt-4 text-sm">
+            <div className="flex justify-between">
+              <span className="text-gray-500">تعداد محصولات</span>
+              <strong>{formatNumber(cart?.totalItems ?? 0)}</strong>
+            </div>
+
+            <div className="flex justify-between">
+              <span className="text-gray-500">مبلغ قابل پرداخت</span>
+              <strong>{formatToman(cart?.totalPrice ?? 0)}</strong>
+            </div>
+          </div>
+        </aside>
+      </div>
     </main>
+  );
+}
+
+export default function CheckoutPage() {
+  return (
+    <RequireAuth>
+      <CheckoutContent />
+    </RequireAuth>
   );
 }

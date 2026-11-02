@@ -1,43 +1,40 @@
-
 "use client";
 
-import { useEffect, useState } from "react";
-import Image from "next/image";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { getProducts } from "@/lib/api";
-import type { Product } from "@/types/shop";
+import ProductImage from "@/components/shop/product-image";
+import { getCategoriesCached, getProducts } from "@/lib/api";
+import { formatNumber } from "@/lib/format";
+import { siteConfig } from "@/lib/site-config";
+import type { Category, Product } from "@/types/shop";
+
+const HOME_PRODUCTS_LIMIT = 12;
 
 export default function HomePage() {
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [retry, setRetry] = useState(0);
+
+  const carouselRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadProducts() {
-      try {
-        setLoading(true);
-        setError(false);
+      setLoading(true);
+      setError(false);
 
-        const firstPage = await getProducts({
+      try {
+        const response = await getProducts({
           page: 1,
-          limit: 100,
+          limit: HOME_PRODUCTS_LIMIT,
+          sort: "newest",
         });
 
-        let allProducts = [...firstPage.data];
-
-        for (let page = 2; page <= firstPage.totalPages; page++) {
-          const response = await getProducts({
-            page,
-            limit: 100,
-          });
-
-          allProducts = [...allProducts, ...response.data];
-        }
-
         if (!cancelled) {
-          setProducts(allProducts);
+          setProducts(response.data);
         }
       } catch {
         if (!cancelled) {
@@ -55,13 +52,32 @@ export default function HomePage() {
     return () => {
       cancelled = true;
     };
+  }, [retry]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    getCategoriesCached()
+      .then((response) => {
+        if (!cancelled && Array.isArray(response.data)) {
+          setCategories(response.data);
+        }
+      })
+      .catch(() => {
+        // بخش دسته‌بندی‌ها اختیاری است؛ نبودنش صفحه را خراب نمی‌کند.
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   function scrollCarousel(direction: "next" | "prev") {
-    const carousel = document.getElementById("home-products");
+    const carousel = carouselRef.current;
 
     if (!carousel) return;
 
+    // در صفحهٔ راست‌چین، پیمایش به سمت «بعدی» یعنی scrollLeft منفی.
     carousel.scrollBy({
       left:
         direction === "next"
@@ -72,17 +88,11 @@ export default function HomePage() {
   }
 
   return (
-    <main
-      dir="rtl"
-      className="min-h-screen overflow-hidden bg-white text-black"
-    >
-      <section className="relative flex min-h-[65vh] flex-col items-center justify-center px-5 py-20 text-center sm:min-h-[70vh] sm:py-28">
-        <Link
-          href="/"
-          className="text-5xl font-black tracking-tight sm:text-7xl"
-        >
-          SHOPIFY
-        </Link>
+    <main dir="rtl" className="bg-white text-black">
+      <section className="relative flex min-h-[60vh] flex-col items-center justify-center px-5 py-16 text-center sm:min-h-[65vh] sm:py-24">
+        <p className="text-5xl font-black tracking-tight sm:text-7xl">
+          {siteConfig.name}
+        </p>
 
         <h1 className="mt-8 max-w-3xl text-3xl font-extrabold leading-relaxed tracking-tight sm:text-5xl sm:leading-[1.6]">
           انتخاب بهتر،
@@ -95,7 +105,7 @@ export default function HomePage() {
           متناسب با نیازت انجام بده.
         </p>
 
-        <div className="mt-7 flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-xs text-gray-500 sm:text-sm">
+        <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
           <span className="rounded-full border border-gray-200 px-4 py-2 text-xs font-medium text-gray-500 sm:text-sm">
             تجربه خرید ساده
           </span>
@@ -109,28 +119,45 @@ export default function HomePage() {
           </span>
         </div>
 
-        <Link
-          href="/shop"
-          className="mt-9 inline-flex items-center gap-3 rounded-xl bg-black px-8 py-4 text-sm font-medium text-white transition duration-200 hover:bg-gray-800 active:scale-[0.98]"
-        >
+        <Link href="/shop" className="btn btn-primary mt-9 gap-3 px-8 py-4">
           ورود به فروشگاه
           <span aria-hidden="true">←</span>
         </Link>
-
-        <p className="mt-4 text-xs text-gray-400">
-          انتخابت رو از اینجا شروع کن.
-        </p>
       </section>
+
+      {categories.length > 0 && (
+        <section
+          aria-label="دسته‌بندی محصولات"
+          className="mx-auto max-w-7xl px-5 pb-14 sm:px-8"
+        >
+          <h2 className="mb-6 text-xl font-bold sm:text-2xl">
+            دسته‌بندی‌ها
+          </h2>
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {categories.map((category) => (
+              <Link
+                key={category.id}
+                href={`/categories/${encodeURIComponent(category.slug)}`}
+                className="card flex items-center justify-between gap-3 px-4 py-4 text-sm font-medium transition hover:border-black"
+              >
+                <span className="line-clamp-1">{category.name}</span>
+                <span className="shrink-0 text-xs text-gray-400">
+                  {formatNumber(category.productCount)}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="mx-auto max-w-7xl px-5 pb-16 sm:px-8">
         <div className="mb-6 flex items-end justify-between gap-4">
           <div>
-            <h2 className="text-xl font-bold sm:text-2xl">
-              محصولات فروشگاه
-            </h2>
+            <h2 className="text-xl font-bold sm:text-2xl">جدیدترین محصولات</h2>
 
             <p className="mt-2 text-sm text-gray-500">
-              نگاهی به محصولات موجود در فروشگاه
+              نگاهی به تازه‌ترین محصولات فروشگاه
             </p>
           </div>
 
@@ -156,8 +183,8 @@ export default function HomePage() {
         </div>
 
         {loading ? (
-          <div className="flex gap-4 overflow-hidden">
-            {Array.from({ length: 4 }).map((_, index) => (
+          <div className="flex gap-4 overflow-hidden" aria-busy="true">
+            {Array.from({ length: 4 }, (_, index) => (
               <div
                 key={index}
                 className="h-64 min-w-55 flex-1 animate-pulse rounded-2xl bg-gray-100"
@@ -165,14 +192,14 @@ export default function HomePage() {
             ))}
           </div>
         ) : error ? (
-          <div className="rounded-2xl border border-gray-200 px-5 py-10 text-center">
+          <div role="alert" className="card px-5 py-10 text-center">
             <p className="text-sm text-gray-600">
               دریافت محصولات با مشکل مواجه شد.
             </p>
 
             <button
               type="button"
-              onClick={() => window.location.reload()}
+              onClick={() => setRetry((value) => value + 1)}
               className="mt-4 text-sm font-semibold underline underline-offset-4"
             >
               تلاش مجدد
@@ -184,7 +211,7 @@ export default function HomePage() {
           </p>
         ) : (
           <div
-            id="home-products"
+            ref={carouselRef}
             className="flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth pb-4"
           >
             {products.map((product) => (
@@ -193,20 +220,13 @@ export default function HomePage() {
                 href={`/shop/${product.id}`}
                 className="group w-55 shrink-0 snap-start sm:w-62.5"
               >
-                <div className="relative flex aspect-square items-center justify-center overflow-hidden rounded-2xl border border-gray-100 bg-gray-50 p-5 transition-colors group-hover:border-gray-300">
-                  {product.image?.startsWith("/") ? (
-                    <Image
-                      src={product.image}
-                      alt={product.name}
-                      fill
-                      sizes="(max-width: 640px) 220px, 250px"
-                      className="object-contain p-5 transition-transform duration-300 group-hover:scale-105"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center text-xs text-gray-400">
-                      تصویر موجود نیست
-                    </div>
-                  )}
+                <div className="relative aspect-square overflow-hidden rounded-2xl border border-gray-100 bg-gray-50 transition-colors group-hover:border-gray-300">
+                  <ProductImage
+                    src={product.image}
+                    alt={product.name}
+                    sizes="(max-width: 640px) 220px, 250px"
+                    className="object-contain p-5 transition-transform duration-300 group-hover:scale-105"
+                  />
                 </div>
 
                 <div className="px-1 pt-4">
@@ -215,7 +235,7 @@ export default function HomePage() {
                   </p>
 
                   <p className="mt-3 text-sm font-bold">
-                    {new Intl.NumberFormat("fa-IR").format(product.price)}
+                    {formatNumber(product.price)}
                     <span className="mr-1 text-xs font-normal text-gray-500">
                       تومان
                     </span>
@@ -231,19 +251,12 @@ export default function HomePage() {
         )}
 
         <div className="mt-8 flex justify-center">
-          <Link
-            href="/shop"
-            className="inline-flex items-center gap-2 rounded-xl border border-black px-6 py-3 text-sm font-medium transition hover:bg-black hover:text-white"
-          >
+          <Link href="/shop" className="btn btn-outline gap-2 border-black px-6">
             مشاهده همه محصولات
             <span aria-hidden="true">←</span>
           </Link>
         </div>
       </section>
-
-      <footer className="border-t border-gray-100 py-6 text-center text-xs text-gray-400">
-        Shopify © {new Date().getFullYear()}
-      </footer>
     </main>
   );
 }
