@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getProducts } from "@/lib/api";
 import type { Product } from "@/types/shop";
+import { getImageUrl } from "@/lib/api";
 
 export default function HomePage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -186,12 +187,12 @@ export default function HomePage() {
             {products.map((product) => (
               <Link
                 key={product.id}
-                href={`/shop/${product.slug}`}
+                href={`/shop/${product.id}`}
                 className="group w-55 shrink-0 snap-start sm:w-62.5"
               >
                 <div className="flex aspect-square items-center justify-center overflow-hidden rounded-2xl border border-gray-100 bg-gray-50 p-5 transition-colors group-hover:border-gray-300">
                   <img
-                    src={product.image}
+                    src={getImageUrl(product.image)}
                     alt={product.name}
                     loading="lazy"
                     className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-105"

@@ -62,6 +62,7 @@ export default function ProductDetailsPage() {
 
     try {
       await addToCart(product.id, quantity);
+      window.dispatchEvent(new Event("shop:cart-updated"));
       setSuccess("محصول با موفقیت به سبد خرید اضافه شد.");
     } catch (err) {
       if (err instanceof Error && err.message === "LOGIN_REQUIRED") {

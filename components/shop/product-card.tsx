@@ -32,6 +32,7 @@ export default function ProductCard({ product }: ProductCardProps) {
 
     try {
       await addToCart(product.id, 1);
+      window.dispatchEvent(new Event("shop:cart-updated"));
       setMessage("به سبد اضافه شد.");
     } catch (err) {
       if (err instanceof Error && err.message === "LOGIN_REQUIRED") {

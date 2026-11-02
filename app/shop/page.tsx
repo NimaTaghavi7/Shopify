@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -7,6 +6,7 @@ import Pagination from "@/components/shop/pagination";
 import ProductCard from "@/components/shop/product-card";
 import ProductFilters from "@/components/shop/product-filters";
 import { getCategories, getProducts } from "@/lib/api";
+import { getImageUrl } from "@/lib/api";
 import "./price-range.css";
 import type {
   Category,
@@ -51,7 +51,7 @@ export default function ShopPage() {
 
   const [priceBoundsError, setPriceBoundsError] = useState(false);
 
-  // تأخیر کوتاه برای جستجو
+  
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(filters.search.trim());
@@ -61,7 +61,6 @@ export default function ShopPage() {
     return () => clearTimeout(timer);
   }, [filters.search]);
 
-  // دریافت دسته‌بندی‌ها
   useEffect(() => {
     let cancelled = false;
 
@@ -93,7 +92,6 @@ export default function ShopPage() {
     };
   }, [retry]);
 
-  // محاسبه حداقل و حداکثر قیمت کل محصولات
   useEffect(() => {
     let cancelled = false;
 
@@ -152,7 +150,7 @@ export default function ShopPage() {
     };
   }, [retry]);
 
-  // دریافت محصولات براساس فیلترها
+ 
   useEffect(() => {
     let cancelled = false;
 

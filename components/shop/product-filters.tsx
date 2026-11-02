@@ -193,7 +193,7 @@ export default function ProductFilters({
               className="peer sr-only"
             />
 
-            <span className="h-6 w-11 rounded-full bg-gray-200 transition-colors peer-checked:bg-black peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-black" />
+            <span className="h-6 w-11 rounded-full bg-gray-200 transition-colors peer-checked:bg-black peer-focus-visible:outline peer-focus-visible:outline-offset-2 peer-focus-visible:outline-black" />
 
             <span className="pointer-events-none absolute right-0.5 h-5 w-5 rounded-full border border-gray-300 bg-white shadow-sm transition-transform peer-checked:-translate-x-5" />
           </span>
