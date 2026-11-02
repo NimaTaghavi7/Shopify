@@ -1,3 +1,4 @@
+
 import type {
   CategoriesResponse,
   ProductsResponse,
@@ -57,7 +58,13 @@ function getToken(): string | null {
   return localStorage.getItem("token");
 }
 
-function buildQuery(params: Record<string, unknown>): string {
+function createError(message: string, status?: number): ApiError {
+  const error = new Error(message) as ApiError;
+  error.status = status;
+  return error;
+}
+
+function buildQuery(params: GetProductsParams): string {
   const searchParams = new URLSearchParams();
 
   Object.entries(params).forEach(([key, value]) => {
@@ -84,9 +91,7 @@ async function request<T>(
     const token = getToken();
 
     if (!token) {
-      const error = new Error("برای ادامه ابتدا وارد حساب کاربری شو.") as ApiError;
-      error.status = 401;
-      throw error;
+      throw createError("برای ادامه ابتدا وارد حساب کاربری شو.", 401);
     }
 
     headers.set("Authorization", `Bearer ${token}`);
@@ -101,7 +106,9 @@ async function request<T>(
       cache: "no-store",
     });
   } catch {
-    throw new Error("ارتباط با سرور برقرار نشد. اتصال اینترنت را بررسی کن.");
+    throw createError(
+      "ارتباط با سرور برقرار نشد. اتصال اینترنت را بررسی کن.",
+    );
   }
 
   if (!response.ok) {
@@ -109,28 +116,31 @@ async function request<T>(
 
     try {
       const data = await response.json();
-      message =
-        data.message ||
-        data.error ||
-        data.errors?.[0]?.message ||
-        message;
-    } catch {
-      if (response.status === 401) {
-        message = "نشست کاربری معتبر نیست. دوباره وارد شو.";
-      } else if (response.status === 404) {
-        message = "اطلاعات موردنظر پیدا نشد.";
-      } else if (response.status === 409) {
-        message = "موجودی محصول کافی نیست.";
-      } else if (response.status === 400) {
-        message = "اطلاعات ارسال‌شده معتبر نیست.";
-      } else if (response.status >= 500) {
-        message = "خطایی در سرور رخ داده است.";
+
+      if (typeof data.message === "string") {
+        message = data.message;
+      } else if (typeof data.error === "string") {
+        message = data.error;
+      } else if (typeof data.errors?.[0]?.message === "string") {
+        message = data.errors[0].message;
       }
+    } catch {
+      // پاسخ خطا JSON نبود.
     }
 
-    const error = new Error(message) as ApiError;
-    error.status = response.status;
-    throw error;
+    if (response.status === 401) {
+      message = "نشست کاربری معتبر نیست. دوباره وارد شو.";
+    } else if (response.status === 404) {
+      message = "اطلاعات موردنظر پیدا نشد.";
+    } else if (response.status === 409) {
+      message = "موجودی محصول یا وضعیت سفارش تغییر کرده است.";
+    } else if (response.status === 400) {
+      message = "اطلاعات ارسال‌شده معتبر نیست.";
+    } else if (response.status >= 500) {
+      message = "خطایی در سرور رخ داده است.";
+    }
+
+    throw createError(message, response.status);
   }
 
   if (response.status === 204) {
@@ -140,9 +150,25 @@ async function request<T>(
   return (await response.json()) as T;
 }
 
+function unwrap<T>(result: T | { data: T }): T {
+  if (
+    result !== null &&
+    typeof result === "object" &&
+    "data" in result
+  ) {
+    return (result as { data: T }).data;
+  }
+
+  return result as T;
+}
+
+// Categories
+
 export function getCategories(): Promise<CategoriesResponse> {
   return request<CategoriesResponse>("/categories");
 }
+
+// Products
 
 export function getProducts(
   params: GetProductsParams = {},
@@ -152,21 +178,37 @@ export function getProducts(
   );
 }
 
-export function getProduct(id: string | number): Promise<Product> {
-  return request<Product>(
+export async function getProduct(
+  id: string | number,
+): Promise<Product> {
+  const result = await request<Product | { data: Product }>(
     `/products/${encodeURIComponent(String(id))}`,
   );
+
+  return unwrap(result);
 }
 
-export function getCart(): Promise<Cart> {
-  return request<Cart>("/me/cart", {}, true);
+// Cart
+
+export async function getCart(): Promise<Cart> {
+  const result = await request<Cart | { data: Cart }>(
+    "/me/cart",
+    {},
+    true,
+  );
+
+  return unwrap(result);
 }
 
-export function addToCart(
+export async function addToCart(
   productId: string | number,
   quantity: number,
 ): Promise<Cart> {
-  return request<Cart>(
+  if (!Number.isInteger(quantity) || quantity < 1) {
+    throw createError("تعداد محصول معتبر نیست.", 400);
+  }
+
+  await request(
     "/me/cart/items",
     {
       method: "POST",
@@ -177,13 +219,19 @@ export function addToCart(
     },
     true,
   );
+
+  return getCart();
 }
 
-export function updateCartItem(
+export async function updateCartItem(
   productId: string | number,
   quantity: number,
 ): Promise<Cart> {
-  return request<Cart>(
+  if (!Number.isInteger(quantity) || quantity < 1) {
+    throw createError("تعداد محصول معتبر نیست.", 400);
+  }
+
+  await request(
     `/me/cart/items/${encodeURIComponent(String(productId))}`,
     {
       method: "PATCH",
@@ -191,16 +239,20 @@ export function updateCartItem(
     },
     true,
   );
+
+  return getCart();
 }
 
-export function removeCartItem(
+export async function removeCartItem(
   productId: string | number,
 ): Promise<Cart> {
-  return request<Cart>(
+  await request(
     `/me/cart/items/${encodeURIComponent(String(productId))}`,
     { method: "DELETE" },
     true,
   );
+
+  return getCart();
 }
 
 export function clearCart(): Promise<void> {
@@ -211,8 +263,12 @@ export function clearCart(): Promise<void> {
   );
 }
 
-export function createOrder(data: CreateOrderData): Promise<Order> {
-  return request<Order>(
+// Orders
+
+export async function createOrder(
+  data: CreateOrderData,
+): Promise<Order> {
+  const result = await request<Order | { data: Order }>(
     "/me/orders",
     {
       method: "POST",
@@ -220,35 +276,57 @@ export function createOrder(data: CreateOrderData): Promise<Order> {
     },
     true,
   );
+
+  return unwrap(result);
 }
 
-export function getOrders(): Promise<Order[]> {
-  return request<Order[]>("/me/orders", {}, true);
+export async function getOrders(): Promise<Order[]> {
+  const result = await request<Order[] | { data: Order[] }>(
+    "/me/orders",
+    {},
+    true,
+  );
+
+  return unwrap(result);
 }
 
-export function getOrder(id: string | number): Promise<Order> {
-  return request<Order>(
+export async function getOrder(
+  id: string | number,
+): Promise<Order> {
+  const result = await request<Order | { data: Order }>(
     `/me/orders/${encodeURIComponent(String(id))}`,
     {},
     true,
   );
+
+  return unwrap(result);
 }
 
-export function payOrder(id: string | number): Promise<Order> {
-  return request<Order>(
+export async function payOrder(
+  id: string | number,
+): Promise<Order> {
+  await request(
     `/me/orders/${encodeURIComponent(String(id))}/pay`,
     { method: "POST" },
     true,
   );
+
+  return getOrder(id);
 }
 
-export function cancelOrder(id: string | number): Promise<Order> {
-  return request<Order>(
+export async function cancelOrder(
+  id: string | number,
+): Promise<Order> {
+  await request(
     `/me/orders/${encodeURIComponent(String(id))}/cancel`,
     { method: "POST" },
     true,
   );
+
+  return getOrder(id);
 }
+
+// Helpers
 
 export function getImageUrl(image: string): string {
   if (!image) return "";
